@@ -4,7 +4,7 @@
 import random
 from models import IncidentAction, IncidentObservation, StepResult
 from incidents import TICKETS
-from server.graders import GRADERS
+from graders import GRADERS
 
 
 class IncidentEnv:

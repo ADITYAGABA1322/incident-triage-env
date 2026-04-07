@@ -4,8 +4,8 @@
 import uuid
 from fastapi import FastAPI, HTTPException
 from models import IncidentAction, StepResult
-from server.environment import IncidentEnv
-from server.graders import GRADERS
+from environment import IncidentEnv
+from graders import GRADERS
 
 app = FastAPI(title="Incident Triage Environment")
 

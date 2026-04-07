@@ -12,8 +12,8 @@ load_dotenv()
 
 BASE_URL = "http://localhost:8000"
 client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.getenv("NVIDIA_API_KEY")
+    base_url=os.getenv("API_BASE_URL"),
+    api_key=os.getenv("HF_TOKEN")
 )
 
 SYSTEM_PROMPT = """You are an expert SRE (Site Reliability Engineer) triaging production incidents.
@@ -67,7 +67,7 @@ def call_llm(observation: dict) -> str:
     full_response = ""
     try:
         completion = client.chat.completions.create(
-            model="mistralai/mistral-7b-instruct-v0.3",
+            model=os.getenv("MODEL_NAME"),
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": build_user_prompt(observation)}
@@ -133,6 +133,8 @@ def run_episode(task_type: str = None) -> dict:
     step_response = requests.post(f"{BASE_URL}/step", json=action, params={"session_id": session_id})
     step_response.raise_for_status()
     result = step_response.json()
+    # This need to be kept for submission grading, so we print it in a structured way
+    print(f"[STEP] task_id={result['task_type']} action={result['agent_answer']} reward={result['reward']}")
 
     print(f"Answer   : {result['agent_answer']}")
     print(f"Expected : {result['ground_truth']}")
@@ -150,9 +152,10 @@ def run_episode(task_type: str = None) -> dict:
 
 
 def run_full_eval():
+    print("[START]")
     task_types = ["task1", "task2", "task3"]
     
-    rounds = len(TICKETS) * 3  # 🔥 FIXED
+    rounds = len(TICKETS)  # 🔥 FIXED
     scores = []
     errors = 0
 
@@ -185,7 +188,7 @@ def run_full_eval():
             if task_scores[task]:
                 acc = sum(task_scores[task]) / len(task_scores[task]) * 100
                 print(f"{task} Accuracy : {acc:.2f}%")
-
-
+    print("[END]")
+    
 if __name__ == "__main__":
     run_full_eval()

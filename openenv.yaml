@@ -2,8 +2,8 @@ spec_version: 1
 name: Incident_Triage
 type: space
 runtime: fastapi
-app: server.app:app
-port: 8000
+app: app:app
+port: 7860
 version: "1.0.0"
 description: >
   RL-style environment for SRE incident triage. 
@@ -11,7 +11,7 @@ description: >
   identify root cause, or recommend remediation actions.
 
 api:
-  base_url: http://localhost:8000
+  base_url: http://0.0.0.0:7860
   endpoints:
     reset:
       method: POST
@@ -62,11 +62,11 @@ tasks:
     reward: binary  # 1.0 correct | 0.0 incorrect
 
 dataset:
-  total_tickets: 16
+  total_tickets: 36
   split:
-    task1: 6
-    task2: 5
-    task3: 5
+    task1: 13
+    task2: 12
+    task3: 11
 
 reproducibility:
   llm_seed: 42
