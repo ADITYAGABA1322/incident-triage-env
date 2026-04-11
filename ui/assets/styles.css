@@ -150,6 +150,7 @@ main {
 .guide-grid,
 .status-overview,
 .feature-strip,
+.stats-grid,
 .route-grid,
 .task-grid {
   display: grid;
@@ -285,6 +286,14 @@ main {
 .feature-strip,
 .status-overview {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hero-panel .stats-grid {
+  gap: 22px;
+}
+
+.hero-panel .stat-card {
+  min-height: 142px;
 }
 
 .feature-strip {
@@ -486,6 +495,11 @@ main {
 .routes-section {
   margin-top: 0;
   padding: 32px;
+}
+
+.routes-section .route-grid {
+  gap: 28px;
+  margin-top: 24px;
 }
 
 .route-card {
