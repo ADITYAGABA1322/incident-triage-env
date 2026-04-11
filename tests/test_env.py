@@ -55,6 +55,10 @@ class IncidentEnvApiTests(unittest.TestCase):
         self.assertEqual(playground_response.status_code, 200)
         self.assertIn("Interactive playground", playground_response.text)
 
+        api_response = self.client.get("/api")
+        self.assertEqual(api_response.status_code, 200)
+        self.assertIn("API Explorer", api_response.text)
+
         asset_response = self.client.get("/assets/app.js")
         self.assertEqual(asset_response.status_code, 200)
         self.assertIn("bootstrap", asset_response.text)

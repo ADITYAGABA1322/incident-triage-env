@@ -116,6 +116,149 @@ function buildActionPayload(observation, selectedValue) {
   return payload;
 }
 
+function createEndpointCard(endpoint) {
+  const card = document.createElement("article");
+  card.className = "endpoint-card";
+
+  const header = document.createElement("div");
+  header.className = "endpoint-card-header";
+  header.append(createBadge(endpoint.method, `method-${endpoint.method.toLowerCase()}`));
+
+  const path = document.createElement("code");
+  path.textContent = endpoint.path;
+  header.appendChild(path);
+
+  const title = document.createElement("h3");
+  title.textContent = endpoint.title;
+
+  const description = document.createElement("p");
+  description.textContent = endpoint.description;
+
+  const meta = document.createElement("div");
+  meta.className = "endpoint-meta";
+  endpoint.notes.forEach((note) => {
+    meta.appendChild(createBadge(note));
+  });
+
+  const link = document.createElement("a");
+  link.className = "button button-secondary endpoint-link";
+  link.href = endpoint.href;
+  link.textContent = endpoint.linkText;
+
+  card.append(header, title, description, meta, link);
+  return card;
+}
+
+async function initApi() {
+  const [health, metadata, grader, schema] = await Promise.all([
+    fetchJson("/health"),
+    fetchJson("/metadata"),
+    fetchJson("/grader"),
+    fetchJson("/schema"),
+  ]);
+
+  document.querySelector("[data-api-health]").textContent = health.status === "healthy" ? "Healthy" : "Unavailable";
+  document.querySelector("[data-api-summary]").textContent =
+    `${safeText(metadata.total_tickets)} incidents across ${Object.keys(metadata.tasks || {}).length} task families.`;
+
+  const endpoints = [
+    {
+      method: "GET",
+      path: "/health",
+      title: "Health check",
+      description: "Fast validator ping. Must return a healthy status.",
+      notes: ["validator", "no body"],
+      href: "/health",
+      linkText: "Open raw health",
+    },
+    {
+      method: "GET",
+      path: "/metadata",
+      title: "Environment metadata",
+      description: "Shows name, task inventory, labels, and dataset count.",
+      notes: ["task inventory", "reviewer-friendly"],
+      href: "/metadata",
+      linkText: "Open raw metadata",
+    },
+    {
+      method: "GET",
+      path: "/schema",
+      title: "Typed contract schemas",
+      description: "Exposes action, observation, reward, state, and step result models.",
+      notes: ["typed models", "OpenEnv spec"],
+      href: "/schema",
+      linkText: "Open raw schema",
+    },
+    {
+      method: "POST",
+      path: "/reset",
+      title: "Start an episode",
+      description: "Creates a session and returns the first observation. No grading happens yet.",
+      notes: ["returns session_id", "body optional"],
+      href: "/playground",
+      linkText: "Try in playground",
+    },
+    {
+      method: "POST",
+      path: "/step?session_id=...",
+      title: "Submit an answer",
+      description: "Grades exactly one action and returns reward, done, correctness, and state.",
+      notes: ["reward 0-1", "single step"],
+      href: "/playground",
+      linkText: "Try in playground",
+    },
+    {
+      method: "GET",
+      path: "/state?session_id=...",
+      title: "Read episode state",
+      description: "Reads active or completed episode state for a known session id.",
+      notes: ["typed state", "debugging"],
+      href: "/playground",
+      linkText: "Create session first",
+    },
+    {
+      method: "GET",
+      path: "/docs",
+      title: "Generated FastAPI docs",
+      description: "Full OpenAPI interface generated from the running backend.",
+      notes: ["developer docs", "OpenAPI"],
+      href: "/docs",
+      linkText: "Open FastAPI docs",
+    },
+    {
+      method: "GET",
+      path: "/openapi.json",
+      title: "Machine-readable contract",
+      description: "Raw OpenAPI document used by tools and automated inspectors.",
+      notes: ["JSON", "tooling"],
+      href: "/openapi.json",
+      linkText: "Open raw OpenAPI",
+    },
+  ];
+
+  const endpointGrid = document.querySelector("[data-endpoint-grid]");
+  endpointGrid.replaceChildren();
+  endpoints.forEach((endpoint) => {
+    endpointGrid.appendChild(createEndpointCard(endpoint));
+  });
+
+  const schemaGrid = document.querySelector("[data-api-schema-grid]");
+  schemaGrid.replaceChildren();
+  Object.keys(schema).forEach((name) => {
+    schemaGrid.appendChild(createBadge(name));
+  });
+
+  const graderList = document.querySelector("[data-api-grader-list]");
+  graderList.replaceChildren();
+  Object.entries(grader.tasks || {}).forEach(([task, rule]) => {
+    const item = document.createElement("li");
+    const taskName = document.createElement("strong");
+    taskName.textContent = task;
+    item.append(taskName, `: ${safeText(rule)}`);
+    graderList.appendChild(item);
+  });
+}
+
 async function initPlayground() {
   const resetForm = document.getElementById("reset-form");
   const stepForm = document.getElementById("step-form");
@@ -312,6 +455,8 @@ async function bootstrap() {
       await initStatus();
     } else if (page === "playground") {
       await initPlayground();
+    } else if (page === "api") {
+      await initApi();
     }
   } catch (error) {
     const pageShell = document.querySelector(".page-shell");

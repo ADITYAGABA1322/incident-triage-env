@@ -63,6 +63,11 @@ def playground_page():
     return FileResponse(UI_DIR / "playground.html")
 
 
+@app.get("/api", include_in_schema=False)
+def api_page():
+    return FileResponse(UI_DIR / "api.html")
+
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incident Triage API</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=4">
+</head>
+<body data-page="api">
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-kicker">OpenEnv Environment</span>
+        <span class="brand-title">Incident Triage</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/status">Status</a>
+        <a href="/playground">Playground</a>
+        <a href="/docs">FastAPI Docs</a>
+      </nav>
+    </header>
+
+    <main class="stack-layout">
+      <section class="api-hero floating-panel">
+        <div class="section-heading compact">
+          <p class="eyebrow">API Explorer</p>
+          <h1>OpenEnv routes, without raw JSON confusion</h1>
+          <p class="section-copy">
+            This page is for humans. Validators still call the real HTTP endpoints directly:
+            <code>/reset</code>, <code>/step</code>, <code>/state</code>, and schema routes.
+          </p>
+        </div>
+        <div class="api-health-card">
+          <span class="status-caption">Runtime</span>
+          <strong data-api-health>Checking</strong>
+          <p data-api-summary>Loading API metadata.</p>
+        </div>
+      </section>
+
+      <section class="api-flow-grid">
+        <article class="flow-card">
+          <span>1</span>
+          <strong>Reset</strong>
+          <p>Starts one incident episode and returns the observation plus a session id.</p>
+        </article>
+        <article class="flow-card">
+          <span>2</span>
+          <strong>Step</strong>
+          <p>Submits one agent answer and returns reward, correctness, and done status.</p>
+        </article>
+        <article class="flow-card">
+          <span>3</span>
+          <strong>State</strong>
+          <p>Reads the current or completed typed state for a known session id.</p>
+        </article>
+      </section>
+
+      <section class="floating-panel">
+        <div class="section-heading compact">
+          <p class="eyebrow">Validator Surface</p>
+          <h2>Routes the judges and agents use</h2>
+        </div>
+        <div class="endpoint-grid" data-endpoint-grid></div>
+      </section>
+
+      <section class="dual-grid">
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Schemas</p>
+            <h2>Typed model coverage</h2>
+          </div>
+          <div class="badge-grid" data-api-schema-grid></div>
+        </article>
+
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Grader Rules</p>
+            <h2>Reward scale</h2>
+          </div>
+          <ul class="bullet-list" data-api-grader-list></ul>
+        </article>
+      </section>
+
+      <section class="floating-panel api-note">
+        <div class="section-heading compact">
+          <p class="eyebrow">Important</p>
+          <h2>UI is optional, API is mandatory</h2>
+        </div>
+        <p>
+          The hackathon checks the API and baseline script, not this page. This UI exists so reviewers can
+          quickly understand and manually test the same OpenEnv flow from the browser.
+        </p>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js?v=4" defer></script>
+</body>
+</html>
