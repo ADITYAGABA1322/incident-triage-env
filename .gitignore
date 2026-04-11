@@ -1,13 +1,13 @@
 .DS_Store
 # =========================
-# ENV & SECRETS 🔐
+# ENV AND SECRETS
 # =========================
 .env
 .env.*
 *.env
 
 # =========================
-# PYTHON 🐍
+# PYTHON
 # =========================
 __pycache__/
 *.pyc
@@ -24,19 +24,20 @@ env/
 .venv/
 
 # =========================
-# LOG FILES 📄
+# LOG FILES
 # =========================
 *.log
 logs.jsonl
+outputs/
 
 # =========================
-# OS FILES 💻
+# OS FILES
 # =========================
 .DS_Store
 Thumbs.db
 
 # =========================
-# IDE / EDITOR ⚙️
+# IDE / EDITOR
 # =========================
 .vscode/
 .idea/
@@ -44,7 +45,7 @@ Thumbs.db
 *.swo
 
 # =========================
-# MODEL / DATA FILES 🤖
+# MODEL / DATA FILES
 # =========================
 *.onnx
 *.pt
@@ -57,27 +58,28 @@ data/
 datasets/
 
 # =========================
-# BUILD / OUTPUT 🚀
+# BUILD / OUTPUT
 # =========================
 dist/
 build/
 out/
 
 # =========================
-# TEMP FILES 🗑️
+# TEMP FILES
 # =========================
 *.tmp
 *.temp
 .cache/
+.pycache/
 
 # =========================
-# TEST / COVERAGE 🧪
+# TEST / COVERAGE
 # =========================
 coverage/
 .nyc_output/
 
 # =========================
-# DOCKER 🐳 (optional)
+# DOCKER (optional)
 # =========================
 *.pid
 *.seed

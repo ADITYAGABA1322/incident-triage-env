@@ -3,7 +3,7 @@
 
 TICKETS = [
 
-    # ── TASK 1: Severity Classification ───────────────────────────────────────
+    # TASK 1: Severity Classification
 
     {
         "incident_id": "INC-001",
@@ -72,7 +72,7 @@ TICKETS = [
         "ground_truth": {"severity": "SEV2"}
     },
 
-    # ── TASK 2: Root Cause Classification ─────────────────────────────────────
+    # TASK 2: Root Cause Classification
 
     {
         "incident_id": "INC-006",
@@ -142,7 +142,7 @@ TICKETS = [
         "ground_truth": {"root_cause": "INFRASTRUCTURE"}
     },
 
-    # ── TASK 3: Recommended Action ────────────────────────────────────────────
+    # TASK 3: Recommended Action
 
     {
         "incident_id": "INC-011",
@@ -226,7 +226,7 @@ TICKETS = [
         "ground_truth": {"severity": "SEV1"}
     },
 
-    # ── TASK 1: Severity (Ambiguous + Edge) ─────────────────────────────
+    # TASK 1: Severity (Ambiguous + Edge)
 
     {
         "incident_id": "INC-017",
@@ -263,7 +263,7 @@ TICKETS = [
         "ground_truth": {"severity": "SEV3"}
     },
 
-    # ── TASK 2: Root Cause (Confusing Signals) ───────────────────────────
+    # TASK 2: Root Cause (Confusing Signals)
 
     {
         "incident_id": "INC-020",
@@ -310,7 +310,7 @@ TICKETS = [
         "ground_truth": {"root_cause": "INFRASTRUCTURE"}
     },
 
-    # ── TASK 3: Action (Ambiguous Decisions) ─────────────────────────────
+    # TASK 3: Action (Ambiguous Decisions)
 
     {
         "incident_id": "INC-024",
@@ -368,7 +368,7 @@ TICKETS = [
         "ground_truth": {"action": "FAILOVER"}
     },
 
-    # ── HARD CASES (REAL THINKING) ──────────────────────────────────────
+    # HARD CASES (REAL THINKING)
 
     {
         "incident_id": "INC-029",

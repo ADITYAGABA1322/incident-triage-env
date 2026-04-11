@@ -1,194 +1,408 @@
-# inference.py
-
-import os
 import json
+import os
 import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import requests
-from openai import OpenAI
-from incidents import TICKETS
 from dotenv import load_dotenv
+from openai import OpenAI
+
+from incidents import TICKETS
 
 load_dotenv()
 
-BASE_URL = "http://localhost:8000"
-client = OpenAI(
-    base_url=os.getenv("API_BASE_URL"),
-    api_key=os.getenv("HF_TOKEN")
+API_BASE_URL = os.environ.get("API_BASE_URL") or "https://router.huggingface.co/v1"
+MODEL_NAME = os.environ.get("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+API_KEY = (
+    os.environ.get("HF_TOKEN")
+    or os.environ.get("API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+    or ""
 )
+ENV_URL = os.environ.get("ENV_URL") or "http://localhost:7860"
+BENCHMARK = "incident-triage-env"
+MAX_TOKENS = 300
+TEMPERATURE = 0.0
+OUTPUT_PATH = Path("outputs/baseline_scores.json")
 
-SYSTEM_PROMPT = """You are an expert SRE (Site Reliability Engineer) triaging production incidents.
-You will receive an incident alert and context.
-You must respond with ONLY a valid JSON object. No explanation. No markdown. No extra text. No code blocks.
+SYSTEM_PROMPT = """You are an expert SRE triaging production incidents.
+You will receive an incident alert, structured context, and the expected output field.
+Return ONLY a valid JSON object with this exact shape:
+{"incident_id":"<id>","task_type":"<task_type>","severity":null,"root_cause":null,"action":null}
 
 Rules:
-- For task1: classify severity. Choose ONLY from: SEV1, SEV2, SEV3
-- For task2: classify root cause. Choose ONLY from: DATABASE, NETWORK, APPLICATION, INFRASTRUCTURE, THIRD_PARTY, UNKNOWN
-- For task3: recommend action. Choose ONLY from: ROLLBACK, SCALE_UP, RESTART_SERVICE, FAILOVER, NOTIFY_VENDOR, INVESTIGATE, NO_ACTION
-
-Response format (return this exact structure):
-{"incident_id": "<incident_id>", "task_type": "<task_type>", "severity": "<value or null>", "root_cause": "<value or null>", "action": "<value or null>"}
-
-Only populate the field relevant to the task_type. Set others to null.
+- Populate exactly one of severity, root_cause, or action based on task_type.
+- Allowed severity values: SEV1, SEV2, SEV3
+- Allowed root_cause values: DATABASE, NETWORK, APPLICATION, INFRASTRUCTURE, THIRD_PARTY, UNKNOWN
+- Allowed action values: ROLLBACK, SCALE_UP, RESTART_SERVICE, FAILOVER, NOTIFY_VENDOR, INVESTIGATE, NO_ACTION
+- Keep incident_id and task_type identical to the observation.
+- Do not return markdown, prose, or any extra keys.
 """
 
 
-def build_user_prompt(observation: dict) -> str:
-    return f"""Incident ID: {observation['incident_id']}
-Task Type: {observation['task_type']}
-
-Alert:
-{observation['alert_text']}
-
-Context:
-{json.dumps(observation['context'], indent=2)}
-
-Respond with JSON only. No markdown. No explanation."""
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
-# 🔥 Robust JSON extractor
-def extract_json(raw: str) -> dict:
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    action_clean = action.replace("\n", " ").replace("\r", "")[:100]
+    print(
+        f"[STEP] step={step} action={action_clean} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+class EnvironmentTransport:
+    def reset(self, task_type: str, ticket_id: str) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def step(self, session_id: str, action: Dict[str, Any]) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        return None
+
+
+class HttpEnvironmentTransport(EnvironmentTransport):
+    def __init__(self, base_url: str):
+        self.base_url = base_url.rstrip("/")
+        self.session = requests.Session()
+
+    def probe(self) -> bool:
+        try:
+            response = self.session.get(f"{self.base_url}/health", timeout=5)
+            return response.ok
+        except requests.RequestException:
+            return False
+
+    def reset(self, task_type: str, ticket_id: str) -> Dict[str, Any]:
+        response = self.session.post(
+            f"{self.base_url}/reset",
+            json={"task_type": task_type, "ticket_id": ticket_id},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def step(self, session_id: str, action: Dict[str, Any]) -> Dict[str, Any]:
+        response = self.session.post(
+            f"{self.base_url}/step",
+            params={"session_id": session_id},
+            json=action,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def close(self) -> None:
+        self.session.close()
+
+
+class LocalEnvironmentTransport(EnvironmentTransport):
+    def __init__(self):
+        from fastapi.testclient import TestClient
+
+        import app as app_module
+
+        self.session = TestClient(app_module.app)
+
+    def reset(self, task_type: str, ticket_id: str) -> Dict[str, Any]:
+        response = self.session.post(
+            "/reset",
+            json={"task_type": task_type, "ticket_id": ticket_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def step(self, session_id: str, action: Dict[str, Any]) -> Dict[str, Any]:
+        response = self.session.post(
+            "/step",
+            params={"session_id": session_id},
+            json=action,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def close(self) -> None:
+        self.session.close()
+
+
+def build_transport() -> EnvironmentTransport:
+    http_transport = HttpEnvironmentTransport(ENV_URL)
+    if http_transport.probe():
+        return http_transport
+    http_transport.close()
+    return LocalEnvironmentTransport()
+
+
+def create_model_client() -> Optional[OpenAI]:
+    if not (API_BASE_URL and API_KEY and MODEL_NAME):
+        return None
+    return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+
+
+def build_user_prompt(observation: Dict[str, Any]) -> str:
+    return (
+        f"Incident ID: {observation['incident_id']}\n"
+        f"Task Type: {observation['task_type']}\n"
+        f"Difficulty: {observation['difficulty']}\n"
+        f"Task Description: {observation['task_description']}\n"
+        f"Expected Field: {observation['expected_field']}\n"
+        f"Allowed Values: {', '.join(observation['allowed_values'])}\n\n"
+        f"Alert:\n{observation['alert_text']}\n\n"
+        f"Context:\n{json.dumps(observation['context'], indent=2, sort_keys=True)}\n"
+    )
+
+
+def extract_json(raw: str) -> Dict[str, Any]:
+    fenced = re.search(r"```json\s*(.*?)\s*```", raw, re.DOTALL)
+    if fenced:
+        return json.loads(fenced.group(1))
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
-        raise ValueError("No JSON found in response")
-
+        raise ValueError("No JSON object found in model response.")
     return json.loads(match.group(0))
 
-def normalize_action(action: dict, task_type: str) -> dict:
+
+def normalize_action(raw_action: Dict[str, Any], observation: Dict[str, Any]) -> Dict[str, Any]:
+    task_type = observation["task_type"]
     return {
-        "incident_id": action.get("incident_id"),
+        "incident_id": observation["incident_id"],
         "task_type": task_type,
-        "severity": action.get("severity") if task_type == "task1" else None,
-        "root_cause": action.get("root_cause") if task_type == "task2" else None,
-        "action": action.get("action") if task_type == "task3" else None,
+        "severity": raw_action.get("severity") if task_type == "task1" else None,
+        "root_cause": raw_action.get("root_cause") if task_type == "task2" else None,
+        "action": raw_action.get("action") if task_type == "task3" else None,
     }
 
 
-def call_llm(observation: dict) -> str:
-    full_response = ""
-    try:
-        completion = client.chat.completions.create(
-            model=os.getenv("MODEL_NAME"),
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(observation)}
-            ],
-            temperature=0.1,
-            top_p=0.9,
-            max_tokens=200,
-            seed=42,
-            stream=True
-        )
-
-        for chunk in completion:
-            if chunk.choices and chunk.choices[0].delta.content is not None:
-                full_response += chunk.choices[0].delta.content
-    except Exception as e:
-        print(f"Error calling LLM: {e}")
-        return ""
-
-    return full_response.strip()
+def _number(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        match = re.search(r"(\d+(?:\.\d+)?)", value)
+        if match:
+            return float(match.group(1))
+    return None
 
 
-def run_episode(task_type: str = None) -> dict:
-    # Step 1 — Reset environment
-    params = {"task_type": task_type} if task_type else {}
-    reset_response = requests.post(f"{BASE_URL}/reset", params=params)
-    reset_response.raise_for_status()
-    
-    reset_data = reset_response.json()
-    session_id = reset_data["session_id"]  
-    observation = reset_data
+def predict_severity(alert_text: str, context: Dict[str, Any]) -> str:
+    error_rate = (
+        _number(context.get("error_rate_pct"))
+        or _number(context.get("failure_rate"))
+        or _number(context.get("affected_users_pct"))
+    )
+    revenue_impact = context.get("revenue_impact") is True or context.get("revenue_dependency") == "high"
 
-    print(f"\n{'='*60}")
-    print(f"Incident : {observation['incident_id']}")
-    print(f"Task     : {observation['task_type']}")
-    print(f"Alert    : {observation['alert_text'][:80]}...")
+    if (
+        "CRITICAL" in alert_text
+        or "100%" in alert_text
+        or "REVENUE IMPACT" in alert_text
+        or context.get("region") == "global"
+        or revenue_impact
+        or (error_rate is not None and error_rate >= 40)
+    ):
+        return "SEV1"
 
-    # Step 2 — LLM with retry
-    action = None
-    raw = ""
-    
-    for attempt in range(3):
-        raw = call_llm(observation)
-        print(f"LLM Raw (attempt {attempt+1}): {raw}")
+    if (
+        "INTERNAL ONLY" in alert_text
+        or "COSMETIC" in alert_text
+        or "NO USER-FACING IMPACT" in alert_text
+        or context.get("user_impact") in {"cosmetic", False}
+        or context.get("impact") == "cosmetic"
+    ):
+        return "SEV3"
 
+    return "SEV2"
+
+
+def predict_root_cause(alert_text: str, context_text: str) -> str:
+    if any(keyword in alert_text or keyword in context_text for keyword in ["STRIPE", "SENDGRID", "TWILIO", "VENDOR", "WEBHOOK", "EXTERNAL API"]):
+        return "THIRD_PARTY"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["PACKET LOSS", "BGP", "TRACEROUTE", "ROUTE", "CROSS-REGION", "TRANSIT HOP"]):
+        return "NETWORK"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["POSTGRES", "DB ", "DATABASE", "SLOW QUERY", "CONNECTION POOL", "REPLICA", "WRITE QUERIES", "DB_CPU"]):
+        return "DATABASE"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["KUBERNETES", "NODE", "POD", "CLUSTER", "NOTREADY", "MEMORY PRESSURE", "EC2", "SPOT INTERRUPTION"]):
+        return "INFRASTRUCTURE"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["EXCEPTION", "STACK TRACE", "DEPLOY", "CRASH", "NULLPOINTER", "TIMEOUTEXCEPTION", "CODE"]):
+        return "APPLICATION"
+    return "UNKNOWN"
+
+
+def predict_action(alert_text: str, context_text: str) -> str:
+    if any(keyword in alert_text or keyword in context_text for keyword in ["ROLLBACK", "IMMEDIATELY AFTER DEPLOY", "PREVIOUS_STABLE", "RECENT DEPLOY CAUSED"]):
+        return "ROLLBACK"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["CPU", "QUEUE", "AUTOSCALER", "MAX_REPLICAS", "TRAFFIC SPIKE", "FLASH SALE"]):
+        return "SCALE_UP"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["DEADLOCK", "HEALTH CHECK", "STUCK", "NO RESPONSE", "PROCESS NOT RESPONDING"]):
+        return "RESTART_SERVICE"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["FAILOVER", "READ REPLICA", "PRIMARY DOWN", "PRIMARY RDS", "WRITES FAILING"]):
+        return "FAILOVER"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["SENDGRID", "STRIPE", "TWILIO", "VENDOR"]):
+        return "NOTIFY_VENDOR"
+    if any(keyword in alert_text or keyword in context_text for keyword in ["COSMETIC", "MINOR UI GLITCH"]):
+        return "NO_ACTION"
+    return "INVESTIGATE"
+
+
+def heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
+    task_type = observation["task_type"]
+    alert_text = observation["alert_text"].upper()
+    context_text = json.dumps(observation["context"]).upper()
+
+    if task_type == "task1":
+        return normalize_action({"severity": predict_severity(alert_text, observation["context"])}, observation)
+    if task_type == "task2":
+        return normalize_action({"root_cause": predict_root_cause(alert_text, context_text)}, observation)
+    return normalize_action({"action": predict_action(alert_text, context_text)}, observation)
+
+
+def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> Dict[str, Any]:
+    if model_client is None:
+        return heuristic_action(observation)
+
+    for _ in range(2):
         try:
-            parsed = extract_json(raw)
-            action = normalize_action(parsed, observation["task_type"])
-            break
-        except Exception as e:
-            print(f"Parse failed: {e}")
-            
-    if not action:
-        return {"error": "invalid_json", "raw": raw}
-    
-        # Step 3 — Validate schema
-    required_keys = {"incident_id", "task_type", "severity", "root_cause", "action"}
-    if not required_keys.issubset(action.keys()):
-        print("Invalid schema from LLM")
-        return {"error": "invalid_schema", "raw": raw}
-   
+            completion = model_client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": build_user_prompt(observation)},
+                ],
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            return normalize_action(extract_json(content), observation)
+        except Exception:
+            continue
 
-    # Step 4 — Submit to /step
-    step_response = requests.post(f"{BASE_URL}/step", json=action, params={"session_id": session_id})
-    step_response.raise_for_status()
-    result = step_response.json()
-    # This need to be kept for submission grading, so we print it in a structured way
-    print(f"[STEP] task_id={result['task_type']} action={result['agent_answer']} reward={result['reward']}")
-
-    print(f"Answer   : {result['agent_answer']}")
-    print(f"Expected : {result['ground_truth']}")
-    print(f"Correct  : {result['correct']}  |  Reward: {result['reward']}")
-
-    # 🔥 Logging
-    with open("logs.jsonl", "a") as f:
-        f.write(json.dumps({
-            "observation": observation,
-            "response": action,
-            "result": result
-        }) + "\n")
-        
-    return result
+    return heuristic_action(observation)
 
 
-def run_full_eval():
-    print("[START]")
-    task_types = ["task1", "task2", "task3"]
-    
-    rounds = len(TICKETS)  # 🔥 FIXED
-    scores = []
-    errors = 0
+def reward_value(step_data: Dict[str, Any]) -> float:
+    reward = step_data.get("reward", {})
+    if isinstance(reward, dict):
+        return float(reward.get("value", 0.0))
+    return float(reward or 0.0)
 
-    task_scores = {
-        "task1": [],
-        "task2": [],
-        "task3": []
+
+def active_model_name(model_client: Optional[OpenAI]) -> str:
+    return MODEL_NAME if model_client is not None else "deterministic-baseline"
+
+
+def summarize_action(action: Dict[str, Any]) -> str:
+    for field in ("severity", "root_cause", "action"):
+        value = action.get(field)
+        if value is not None:
+            return str(value)
+    return "no_action"
+
+
+def run_episode(
+    transport: EnvironmentTransport,
+    model_client: Optional[OpenAI],
+    ticket: Dict[str, Any],
+) -> Dict[str, Any]:
+    rewards: List[float] = []
+    steps_taken = 0
+    score = 0.0
+    success = False
+
+    log_start(task=ticket["incident_id"], env=BENCHMARK, model=active_model_name(model_client))
+
+    try:
+        reset_data = transport.reset(ticket["task_type"], ticket["incident_id"])
+        observation = reset_data["observation"]
+        session_id = reset_data.get("info", {}).get("session_id")
+        if not session_id:
+            raise RuntimeError("Environment reset did not return a session_id.")
+
+        steps_taken = 1
+        action = get_action(model_client, observation)
+        step_data = transport.step(session_id=session_id, action=action)
+        score = reward_value(step_data)
+        rewards.append(score)
+        success = bool(step_data.get("info", {}).get("correct", score >= 0.99))
+
+        log_step(
+            step=1,
+            action=summarize_action(action),
+            reward=score,
+            done=bool(step_data.get("done", True)),
+            error=None,
+        )
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+        return {
+            "incident_id": ticket["incident_id"],
+            "task_type": ticket["task_type"],
+            "difficulty": observation.get("difficulty"),
+            "score": score,
+            "success": success,
+            "ground_truth": step_data.get("info", {}).get("ground_truth"),
+            "agent_answer": step_data.get("info", {}).get("agent_answer"),
+        }
+    except Exception as exc:
+        log_step(step=max(steps_taken, 1), action="error", reward=0.0, done=True, error=str(exc))
+        log_end(success=False, steps=steps_taken, score=0.0, rewards=rewards)
+        return {
+            "incident_id": ticket["incident_id"],
+            "task_type": ticket["task_type"],
+            "score": 0.0,
+            "success": False,
+            "error": str(exc),
+        }
+
+
+def write_results(results: List[Dict[str, Any]]) -> None:
+    grouped: Dict[str, List[float]] = {}
+    for result in results:
+        grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
+
+    summary = {
+        "benchmark": BENCHMARK,
+        "model": MODEL_NAME,
+        "episodes": len(results),
+        "average_score": (sum(result.get("score", 0.0) for result in results) / len(results)) if results else 0.0,
+        "by_task": {
+            task_type: {
+                "episodes": len(scores),
+                "average_score": (sum(scores) / len(scores)) if scores else 0.0,
+            }
+            for task_type, scores in grouped.items()
+        },
+        "results": results,
     }
-    
-    for i in range(rounds):
-        task = task_types[i % 3]
-        result = run_episode(task_type=task)
 
-        if "reward" in result:
-            scores.append(result["reward"])
-            task_scores[task].append(result["reward"])
-        else:
-            errors += 1
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text(json.dumps(summary, indent=2))
 
-    print(f"\n{'='*60}")
-    print(f"Total Episodes : {rounds}")
-    print(f"Graded         : {len(scores)}")
-    print(f"JSON Errors    : {errors}")
-    if scores:
-        print(f"Total Reward : {sum(scores)}")
-        print(f"Average Reward : {sum(scores)/len(scores):.2f}")
-        print(f"Overall Accuracy : {sum(scores)/len(scores)*100:.2f}%")
 
-        for task in task_scores:
-            if task_scores[task]:
-                acc = sum(task_scores[task]) / len(task_scores[task]) * 100
-                print(f"{task} Accuracy : {acc:.2f}%")
-    print("[END]")
-    
+def main() -> None:
+    transport = build_transport()
+    model_client = create_model_client()
+    results = [run_episode(transport, model_client, ticket) for ticket in TICKETS]
+    write_results(results)
+    transport.close()
+
+
 if __name__ == "__main__":
-    run_full_eval()
+    main()

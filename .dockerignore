@@ -1,0 +1,9 @@
+.git
+.gitignore
+.venv
+__pycache__
+.pycache
+.DS_Store
+.env
+logs.jsonl
+outputs

@@ -1,99 +1,79 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+"""Lightweight HTTP client for the current FastAPI incident triage server."""
 
-"""Incident Triage Environment Client."""
+from __future__ import annotations
 
-from typing import Dict
+from typing import Any, Dict, Optional
 
-from openenv.core import EnvClient
-from openenv.core.client_types import StepResult
-from openenv.core.env_server.types import State
+import requests
 
-from .models import IncidentTriageAction, IncidentTriageObservation
+try:
+    from .models import IncidentAction, IncidentState, StepResult
+except ImportError:
+    from models import IncidentAction, IncidentState, StepResult
 
 
-class IncidentTriageEnv(
-    EnvClient[IncidentTriageAction, IncidentTriageObservation, State]
-):
-    """
-    Client for the Incident Triage Environment.
+class IncidentTriageClient:
+    """Small helper for calling the local FastAPI endpoints from scripts or notebooks."""
 
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
+    def __init__(self, base_url: str = "http://localhost:7860", timeout: float = 30.0):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self.session = requests.Session()
 
-    Example:
-        >>> # Connect to a running server
-        >>> with IncidentTriageEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
-        ...
-        ...     result = client.step(IncidentTriageAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
+    def __enter__(self) -> "IncidentTriageClient":
+        return self
 
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = IncidentTriageEnv.from_docker_image("Incident_Triage-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(IncidentTriageAction(message="Test"))
-        ... finally:
-        ...     client.close()
-    """
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
-    def _step_payload(self, action: IncidentTriageAction) -> Dict:
-        """
-        Convert IncidentTriageAction to JSON payload for step message.
+    def close(self) -> None:
+        self.session.close()
 
-        Args:
-            action: IncidentTriageAction instance
+    def tasks(self) -> Dict[str, Any]:
+        return self._request("GET", "/tasks")
 
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
-        return {
-            "message": action.message,
-        }
+    def grader_info(self) -> Dict[str, Any]:
+        return self._request("GET", "/grader")
 
-    def _parse_result(self, payload: Dict) -> StepResult[IncidentTriageObservation]:
-        """
-        Parse server response into StepResult[IncidentTriageObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with IncidentTriageObservation
-        """
-        obs_data = payload.get("observation", {})
-        observation = IncidentTriageObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
-            metadata=obs_data.get("metadata", {}),
-        )
-
+    def reset(
+        self,
+        task_type: Optional[str] = None,
+        ticket_id: Optional[str] = None,
+        seed: Optional[int] = None,
+    ) -> StepResult:
         return StepResult(
-            observation=observation,
-            reward=payload.get("reward"),
-            done=payload.get("done", False),
+            **self._request(
+                "POST",
+                "/reset",
+                json={
+                    "task_type": task_type,
+                    "ticket_id": ticket_id,
+                    "seed": seed,
+                },
+            )
         )
 
-    def _parse_state(self, payload: Dict) -> State:
-        """
-        Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
-        """
-        return State(
-            episode_id=payload.get("episode_id"),
-            step_count=payload.get("step_count", 0),
+    def state(self, session_id: str) -> IncidentState:
+        return IncidentState(
+            **self._request("GET", "/state", params={"session_id": session_id})
         )
+
+    def step(self, session_id: str, action: IncidentAction | Dict[str, Any]) -> StepResult:
+        payload = action.model_dump() if isinstance(action, IncidentAction) else action
+        result = self._request(
+            "POST",
+            "/step",
+            params={"session_id": session_id},
+            json=payload,
+        )
+        return StepResult(**result)
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
+        response = self.session.request(
+            method=method,
+            url=f"{self.base_url}{path}",
+            timeout=self.timeout,
+            **kwargs,
+        )
+        response.raise_for_status()
+        return response.json()
