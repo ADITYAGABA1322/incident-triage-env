@@ -282,6 +282,17 @@ async function initPlayground() {
   const summaryField = document.getElementById("summary-field");
   const summaryReward = document.getElementById("summary-reward");
   const summaryStatus = document.getElementById("summary-status");
+  const briefAlert = document.getElementById("brief-alert");
+  const briefTask = document.getElementById("brief-task");
+  const briefDifficulty = document.getElementById("brief-difficulty");
+  const briefExpected = document.getElementById("brief-expected");
+  const briefAllowedValues = document.getElementById("brief-allowed-values");
+  const briefContextSignals = document.getElementById("brief-context-signals");
+  const briefVerdict = document.getElementById("brief-verdict");
+  const briefAgentAnswer = document.getElementById("brief-agent-answer");
+  const briefGroundTruth = document.getElementById("brief-ground-truth");
+  const briefReward = document.getElementById("brief-reward");
+  const briefReason = document.getElementById("brief-reason");
 
   let sessionId = null;
   let observation = null;
@@ -311,6 +322,76 @@ async function initPlayground() {
   const updateSummaryFromResult = (result) => {
     summaryReward.textContent = result.reward?.value ?? "--";
     summaryStatus.textContent = result.done ? "Completed" : "In progress";
+  };
+
+  const formatContextValue = (value) => {
+    if (Array.isArray(value)) return value.join(", ");
+    if (value && typeof value === "object") return JSON.stringify(value);
+    if (typeof value === "boolean") return value ? "true" : "false";
+    return safeText(value);
+  };
+
+  const renderValueChips = (target, values) => {
+    target.replaceChildren();
+    values.forEach((value) => {
+      target.appendChild(createBadge(value));
+    });
+  };
+
+  const renderContextSignals = (target, context) => {
+    target.replaceChildren();
+    Object.entries(context || {}).slice(0, 8).forEach(([key, value]) => {
+      const chip = document.createElement("span");
+      chip.className = "context-chip";
+      const chipKey = document.createElement("strong");
+      chipKey.textContent = key;
+      const chipValue = document.createElement("span");
+      chipValue.textContent = formatContextValue(value);
+      chip.append(chipKey, chipValue);
+      target.appendChild(chip);
+    });
+    if (target.childElementCount === 0) {
+      const empty = document.createElement("span");
+      empty.className = "context-chip";
+      empty.textContent = "No context signals provided.";
+      target.appendChild(empty);
+    }
+  };
+
+  const resetResultBrief = () => {
+    briefVerdict.textContent = "Waiting for step";
+    briefVerdict.dataset.outcome = "waiting";
+    briefAgentAnswer.textContent = "--";
+    briefGroundTruth.textContent = "--";
+    briefReward.textContent = "--";
+    briefReason.textContent = "Submit a step to see the deterministic grader explanation.";
+  };
+
+  const updateBriefFromObservation = (resetResult) => {
+    const nextObservation = resetResult.observation;
+    briefAlert.textContent = nextObservation.alert_text;
+    briefTask.textContent = resetResult.info?.task_name || nextObservation.task_description;
+    briefDifficulty.textContent = nextObservation.difficulty;
+    briefExpected.textContent = nextObservation.expected_field;
+    renderValueChips(briefAllowedValues, nextObservation.allowed_values || []);
+    renderContextSignals(briefContextSignals, nextObservation.context);
+    resetResultBrief();
+  };
+
+  const updateBriefFromResult = (result) => {
+    const correct = Boolean(result.info?.correct);
+    const rewardValue = Number(result.reward?.value || 0);
+    const partialCredit = !correct && rewardValue > 0;
+    briefVerdict.textContent = correct
+      ? "Correct triage decision"
+      : partialCredit
+        ? "Partial credit"
+        : "Incorrect decision";
+    briefVerdict.dataset.outcome = correct ? "correct" : partialCredit ? "partial" : "incorrect";
+    briefAgentAnswer.textContent = safeText(result.info?.agent_answer);
+    briefGroundTruth.textContent = safeText(result.info?.ground_truth);
+    briefReward.textContent = safeText(result.reward?.value);
+    briefReason.textContent = safeText(result.reward?.reason);
   };
 
   const findTicket = (ticketId) => validTickets.find((ticket) => ticket.incident_id === ticketId);
@@ -406,6 +487,7 @@ async function initPlayground() {
       setOutput(observationOutput, result);
       setOutput(resultOutput, "No step submitted yet.");
       updateSummaryFromObservation(observation);
+      updateBriefFromObservation(result);
       setMessage(`Session ready for ${observation.incident_id}. Pick a value and submit the step.`, "success");
     } catch (error) {
       setOutput(observationOutput, { error: error.message });
@@ -433,6 +515,7 @@ async function initPlayground() {
       });
       setOutput(resultOutput, result);
       updateSummaryFromResult(result);
+      updateBriefFromResult(result);
       const reward = result.reward?.value ?? "--";
       setMessage(`Step completed with reward ${reward}.`, reward === 1 ? "success" : "neutral");
     } catch (error) {

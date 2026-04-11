@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Incident Triage Playground</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=4">
+  <link rel="stylesheet" href="/assets/styles.css?v=5">
 </head>
 <body data-page="playground">
   <div class="page-shell">
@@ -129,6 +129,68 @@
         </article>
       </section>
 
+      <section class="brief-grid">
+        <article class="floating-panel brief-card">
+          <div class="section-heading compact">
+            <p class="eyebrow">Observation Brief</p>
+            <h2>What the agent sees</h2>
+          </div>
+          <p class="brief-alert" id="brief-alert">Start a session to load the incident alert.</p>
+          <div class="brief-meta-grid">
+            <div>
+              <span>Task</span>
+              <strong id="brief-task">--</strong>
+            </div>
+            <div>
+              <span>Difficulty</span>
+              <strong id="brief-difficulty">--</strong>
+            </div>
+            <div>
+              <span>Expected field</span>
+              <strong id="brief-expected">--</strong>
+            </div>
+          </div>
+          <div class="brief-block">
+            <span class="brief-label">Allowed values</span>
+            <div class="brief-chip-row" id="brief-allowed-values">
+              <span class="badge">Start a session first</span>
+            </div>
+          </div>
+          <div class="brief-block">
+            <span class="brief-label">Context signals</span>
+            <div class="context-chip-grid" id="brief-context-signals">
+              <span class="context-chip">No context loaded yet.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="floating-panel brief-card result-brief-card">
+          <div class="section-heading compact">
+            <p class="eyebrow">Grader Result</p>
+            <h2>What the reward means</h2>
+          </div>
+          <div class="result-verdict" id="brief-verdict" data-outcome="waiting">Waiting for step</div>
+          <div class="brief-meta-grid">
+            <div>
+              <span>Submitted answer</span>
+              <strong id="brief-agent-answer">--</strong>
+            </div>
+            <div>
+              <span>Ground truth</span>
+              <strong id="brief-ground-truth">--</strong>
+            </div>
+            <div>
+              <span>Reward</span>
+              <strong id="brief-reward">--</strong>
+            </div>
+          </div>
+          <div class="brief-block">
+            <span class="brief-label">Reason</span>
+            <p class="brief-reason" id="brief-reason">Submit a step to see the deterministic grader explanation.</p>
+          </div>
+        </article>
+      </section>
+
       <section class="dual-grid output-grid">
         <article class="floating-panel">
           <div class="section-heading compact">
@@ -148,6 +210,6 @@
       </section>
     </main>
   </div>
-  <script src="/assets/app.js?v=4" defer></script>
+  <script src="/assets/app.js?v=5" defer></script>
 </body>
 </html>
