@@ -2,16 +2,18 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from app import app, sessions
+from app import app, completed_states, sessions
 
 
 class IncidentEnvApiTests(unittest.TestCase):
     def setUp(self) -> None:
         sessions.clear()
+        completed_states.clear()
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         sessions.clear()
+        completed_states.clear()
 
     def test_health_schema_and_mcp_helper_endpoints(self) -> None:
         health_response = self.client.get("/health")
@@ -101,6 +103,19 @@ class IncidentEnvApiTests(unittest.TestCase):
         self.assertTrue(state_body["done"])
         self.assertEqual(state_body["status"], "completed")
         self.assertEqual(state_body["last_reward"], 1.0)
+        self.assertNotIn(session_id, sessions)
+        self.assertIn(session_id, completed_states)
+
+        repeated_step_response = self.client.post(
+            f"/step?session_id={session_id}",
+            json={
+                "incident_id": "INC-014",
+                "task_type": "task3",
+                "action": "FAILOVER",
+            },
+        )
+        self.assertEqual(repeated_step_response.status_code, 400)
+        self.assertIn("already completed", repeated_step_response.json()["detail"])
 
     def test_step_rejects_action_for_wrong_task_type(self) -> None:
         reset_response = self.client.post(

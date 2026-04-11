@@ -13,6 +13,13 @@ function safeText(value) {
   return value == null ? "--" : String(value);
 }
 
+function createBadge(text, extraClass = "") {
+  const badge = document.createElement("span");
+  badge.className = extraClass ? `badge ${extraClass}` : "badge";
+  badge.textContent = safeText(text);
+  return badge;
+}
+
 function setHealthPill(status) {
   const pills = document.querySelectorAll("[data-health-pill]");
   pills.forEach((pill) => {
@@ -23,22 +30,36 @@ function setHealthPill(status) {
 
 function renderTaskCards(target, tasks) {
   if (!target) return;
-  target.innerHTML = "";
+  target.replaceChildren();
   Object.entries(tasks).forEach(([taskId, task]) => {
     const article = document.createElement("article");
     article.className = "task-card";
-    article.innerHTML = `
-      <span class="badge difficulty-${task.difficulty}">${task.difficulty}</span>
-      <h3>${task.name}</h3>
-      <p>Expected field: <strong>${task.expected_field || task.output_field}</strong></p>
-      <div class="task-meta">
-        <span class="badge">${taskId}</span>
-        <span class="badge">${task.ticket_count || 0} incidents</span>
-      </div>
-      <div class="task-values">
-        ${(task.allowed_values || task.labels || []).map((value) => `<span class="badge">${value}</span>`).join("")}
-      </div>
-    `;
+
+    const difficultyClass = `difficulty-${safeText(task.difficulty).toLowerCase().replace(/[^a-z0-9_-]/g, "")}`;
+    const difficulty = createBadge(task.difficulty, difficultyClass);
+    const title = document.createElement("h3");
+    title.textContent = safeText(task.name);
+
+    const expectedField = document.createElement("p");
+    expectedField.append("Expected field: ");
+    const expectedFieldValue = document.createElement("strong");
+    expectedFieldValue.textContent = safeText(task.expected_field || task.output_field);
+    expectedField.appendChild(expectedFieldValue);
+
+    const taskMeta = document.createElement("div");
+    taskMeta.className = "task-meta";
+    taskMeta.append(
+      createBadge(taskId),
+      createBadge(`${task.ticket_count || 0} incidents`),
+    );
+
+    const taskValues = document.createElement("div");
+    taskValues.className = "task-values";
+    (task.allowed_values || task.labels || []).forEach((value) => {
+      taskValues.appendChild(createBadge(value));
+    });
+
+    article.append(difficulty, title, expectedField, taskMeta, taskValues);
     target.appendChild(article);
   });
 }
@@ -69,15 +90,21 @@ async function initStatus() {
   renderTaskCards(document.querySelector("[data-task-grid]"), metadata.tasks);
 
   const schemaGrid = document.querySelector("[data-schema-grid]");
-  schemaGrid.innerHTML = Object.keys(schema)
-    .map((name) => `<span class="badge">${name}</span>`)
-    .join("");
+  schemaGrid.replaceChildren();
+  Object.keys(schema).forEach((name) => {
+    schemaGrid.appendChild(createBadge(name));
+  });
 
   document.querySelector("[data-grader-summary]").textContent = grader.scoring;
   const graderList = document.querySelector("[data-grader-list]");
-  graderList.innerHTML = Object.entries(grader.tasks)
-    .map(([task, rule]) => `<li><strong>${task}</strong>: ${rule}</li>`)
-    .join("");
+  graderList.replaceChildren();
+  Object.entries(grader.tasks).forEach(([task, rule]) => {
+    const item = document.createElement("li");
+    const taskName = document.createElement("strong");
+    taskName.textContent = task;
+    item.append(taskName, `: ${safeText(rule)}`);
+    graderList.appendChild(item);
+  });
 }
 
 function buildActionPayload(observation, selectedValue) {
@@ -160,9 +187,13 @@ async function initPlayground() {
   try {
     const ticketData = await fetchJson("/tickets");
     validTickets = ticketData.tickets || [];
-    ticketOptions.innerHTML = validTickets
-      .map((ticket) => `<option value="${ticket.incident_id}" label="${ticket.task_type} / ${ticket.task_name}"></option>`)
-      .join("");
+    ticketOptions.replaceChildren();
+    validTickets.forEach((ticket) => {
+      const option = document.createElement("option");
+      option.value = safeText(ticket.incident_id);
+      option.label = `${safeText(ticket.task_type)} / ${safeText(ticket.task_name)}`;
+      ticketOptions.appendChild(option);
+    });
     ticketHelper.textContent = `Valid ticket range: ${validTickets[0]?.incident_id || "--"} to ${validTickets.at(-1)?.incident_id || "--"}.`;
   } catch (error) {
     ticketHelper.textContent = `Could not load ticket list: ${error.message}`;
@@ -217,9 +248,13 @@ async function initPlayground() {
       expectedFieldInput.value = observation.expected_field;
       actionValueSelect.disabled = false;
       stepButton.disabled = false;
-      actionValueSelect.innerHTML = observation.allowed_values
-        .map((value) => `<option value="${value}">${value}</option>`)
-        .join("");
+      actionValueSelect.replaceChildren();
+      observation.allowed_values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = safeText(value);
+        option.textContent = safeText(value);
+        actionValueSelect.appendChild(option);
+      });
 
       setOutput(observationOutput, result);
       setOutput(resultOutput, "No step submitted yet.");
@@ -282,7 +317,12 @@ async function bootstrap() {
     const pageShell = document.querySelector(".page-shell");
     const banner = document.createElement("div");
     banner.className = "floating-panel";
-    banner.innerHTML = `<strong>UI data load failed.</strong><p class="status-helper">${error.message}</p>`;
+    const title = document.createElement("strong");
+    title.textContent = "UI data load failed.";
+    const detail = document.createElement("p");
+    detail.className = "status-helper";
+    detail.textContent = error.message;
+    banner.append(title, detail);
     pageShell?.prepend(banner);
   }
 }

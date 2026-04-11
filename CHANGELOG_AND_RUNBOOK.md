@@ -5,7 +5,7 @@ This file explains what changed in the project and how to run or test each part.
 Project path:
 
 ```bash
-cd /Users/adityagaba/Downloads/incident-triage-env
+cd <repo-root>
 ```
 
 ## 1. What changed
@@ -126,7 +126,7 @@ These logs appear in the same terminal where `uvicorn` is running.
 Use port `8000` locally if port `7860` is busy.
 
 ```bash
-cd /Users/adityagaba/Downloads/incident-triage-env
+cd <repo-root>
 source .venv/bin/activate
 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
@@ -372,7 +372,7 @@ Expected:
 ## 6. Run automated tests
 
 ```bash
-cd /Users/adityagaba/Downloads/incident-triage-env
+cd <repo-root>
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
@@ -385,7 +385,7 @@ OK
 ## 7. Run OpenEnv local validation
 
 ```bash
-cd /Users/adityagaba/Downloads/incident-triage-env
+cd <repo-root>
 .venv/bin/openenv validate . --json
 ```
 
@@ -400,7 +400,7 @@ Expected:
 If the local app is running on port `8000`:
 
 ```bash
-cd /Users/adityagaba/Downloads/incident-triage-env
+cd <repo-root>
 ENV_URL=http://127.0.0.1:8000 .venv/bin/python inference.py
 ```
 

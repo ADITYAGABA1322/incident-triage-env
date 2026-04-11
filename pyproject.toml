@@ -37,3 +37,7 @@ py-modules = [
     "inference",
     "models",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server*"]

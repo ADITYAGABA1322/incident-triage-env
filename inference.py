@@ -325,6 +325,7 @@ def run_episode(
     steps_taken = 0
     score = 0.0
     success = False
+    episode_result: Dict[str, Any]
 
     log_start(task=ticket["incident_id"], env=BENCHMARK, model=active_model_name(model_client))
 
@@ -349,9 +350,8 @@ def run_episode(
             done=bool(step_data.get("done", True)),
             error=None,
         )
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
-        return {
+        episode_result = {
             "incident_id": ticket["incident_id"],
             "task_type": ticket["task_type"],
             "difficulty": observation.get("difficulty"),
@@ -362,14 +362,19 @@ def run_episode(
         }
     except Exception as exc:
         log_step(step=max(steps_taken, 1), action="error", reward=0.0, done=True, error=str(exc))
-        log_end(success=False, steps=steps_taken, score=0.0, rewards=rewards)
-        return {
+        score = 0.0
+        success = False
+        episode_result = {
             "incident_id": ticket["incident_id"],
             "task_type": ticket["task_type"],
             "score": 0.0,
             "success": False,
             "error": str(exc),
         }
+    finally:
+        log_end(success=success, steps=max(steps_taken, 1), score=score, rewards=rewards or [0.0])
+
+    return episode_result
 
 
 def write_results(results: List[Dict[str, Any]]) -> None:

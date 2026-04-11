@@ -95,7 +95,7 @@ The project also serves a browser-facing UI from the same FastAPI app:
 
 ## Models
 
-The core models are defined in [models.py](/Users/adityagaba/Downloads/incident-triage-env/models.py):
+The core models are defined in [models.py](./models.py):
 
 - `IncidentObservation`
 - `IncidentAction`
@@ -112,7 +112,7 @@ Validation rules:
 
 ## Reward Logic
 
-Rewarding is deterministic and implemented in [graders.py](/Users/adityagaba/Downloads/incident-triage-env/graders.py).
+Rewarding is deterministic and implemented in [graders.py](./graders.py).
 
 - `task1`: `1.0` exact, `0.5` adjacent severity, `0.0` far miss
 - `task2`: `1.0` exact, `0.5` related domain, `0.25` `UNKNOWN`, `0.0` wrong
