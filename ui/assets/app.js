@@ -40,11 +40,15 @@ function renderTaskCards(target, tasks) {
     const title = document.createElement("h3");
     title.textContent = safeText(task.name);
 
+    const content = document.createElement("div");
+    content.className = "task-card-content";
+
     const expectedField = document.createElement("p");
     expectedField.append("Expected field: ");
     const expectedFieldValue = document.createElement("strong");
     expectedFieldValue.textContent = safeText(task.expected_field || task.output_field);
     expectedField.appendChild(expectedFieldValue);
+    content.append(title, expectedField);
 
     const taskMeta = document.createElement("div");
     taskMeta.className = "task-meta";
@@ -59,7 +63,7 @@ function renderTaskCards(target, tasks) {
       taskValues.appendChild(createBadge(value));
     });
 
-    article.append(difficulty, title, expectedField, taskMeta, taskValues);
+    article.append(difficulty, content, taskMeta, taskValues);
     target.appendChild(article);
   });
 }

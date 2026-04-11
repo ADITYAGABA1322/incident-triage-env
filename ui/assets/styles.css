@@ -481,11 +481,11 @@ main {
 .task-card {
   position: relative;
   overflow: hidden;
-  display: flex;
+  display: grid;
   min-height: 245px;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
+  grid-template-rows: 32px minmax(92px, auto) minmax(36px, auto) minmax(72px, 1fr);
+  align-content: start;
+  gap: 16px;
 }
 
 .task-card::after {
@@ -503,7 +503,29 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 0;
+}
+
+.task-card-content {
+  display: grid;
+  align-content: start;
+  min-height: 92px;
+}
+
+.task-card > .badge:first-child {
+  width: fit-content;
+}
+
+.task-card h3 {
+  min-height: 3.05em;
+}
+
+.task-card p {
+  margin: 0;
+}
+
+.task-values {
+  align-content: start;
 }
 
 .badge {
