@@ -773,8 +773,7 @@ main {
   letter-spacing: -0.05em;
 }
 
-.api-health-card p,
-.api-note p {
+.api-health-card p {
   color: var(--muted);
   line-height: 1.7;
 }
