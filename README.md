@@ -1,16 +1,3 @@
----
-title: Incident Triage OpenEnv
-colorFrom: red
-colorTo: blue
-sdk: docker
-app_port: 7860
-pinned: false
-tags:
-  - openenv
-  - fastapi
-  - reinforcement-learning
----
-
 # Production Incident Triage Environment
 
 This project is an OpenEnv-compatible evaluation environment for production incident response. An agent receives a typed incident observation and must perform one of three real-world triage tasks: classify severity, identify the most likely root cause, or recommend the best immediate action.
