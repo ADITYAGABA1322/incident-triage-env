@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incident Triage Playground</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=3">
+</head>
+<body data-page="playground">
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-kicker">OpenEnv Environment</span>
+        <span class="brand-title">Incident Triage</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/status">Status</a>
+        <a href="/docs">API Docs</a>
+      </nav>
+    </header>
+
+    <main class="stack-layout">
+      <section class="section-heading">
+        <p class="eyebrow">Manual Evaluation</p>
+        <h1>Interactive playground</h1>
+        <p class="section-copy">
+          This page is a browser version of the OpenEnv flow. Reset starts one evaluation episode,
+          Step submits one agent answer, and the result shows the reward returned by the grader.
+        </p>
+      </section>
+
+      <section class="guide-grid">
+        <article class="guide-card">
+          <span>1</span>
+          <strong>Start / Reset Environment</strong>
+          <p>Starts a new incident episode and returns the observation. No grading happens yet.</p>
+        </article>
+        <article class="guide-card">
+          <span>2</span>
+          <strong>Read Observation</strong>
+          <p>Check the incident, expected field, allowed values, and context.</p>
+        </article>
+        <article class="guide-card">
+          <span>3</span>
+          <strong>Submit Step</strong>
+          <p>Send one answer. The backend grades it and prints a terminal log.</p>
+        </article>
+      </section>
+
+      <section class="playground-grid">
+        <article class="floating-panel control-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Step 1</p>
+            <h2>Start a session</h2>
+          </div>
+          <div class="preset-row" aria-label="Quick presets">
+            <button class="preset-button" type="button" data-preset-task="task1" data-preset-ticket="INC-001">Severity case</button>
+            <button class="preset-button" type="button" data-preset-task="task2" data-preset-ticket="INC-006">Root cause case</button>
+            <button class="preset-button" type="button" data-preset-task="task3" data-preset-ticket="INC-014">Action case</button>
+          </div>
+          <form id="reset-form" class="form-grid">
+            <label>
+              <span>Task type</span>
+              <select name="task_type" id="task-type">
+                <option value="">Any task</option>
+                <option value="task1">task1</option>
+                <option value="task2">task2</option>
+                <option value="task3">task3</option>
+              </select>
+            </label>
+            <label>
+              <span>Ticket ID</span>
+              <input type="text" name="ticket_id" id="ticket-id" list="ticket-options" placeholder="INC-014">
+              <datalist id="ticket-options"></datalist>
+              <small id="ticket-helper">Loading valid tickets from the backend.</small>
+            </label>
+            <label>
+              <span>Seed</span>
+              <input type="number" name="seed" placeholder="42">
+            </label>
+            <button class="button button-primary" type="submit" id="reset-button">Start / Reset Environment</button>
+          </form>
+          <div class="inline-status">
+            <span class="mono-label">Session</span>
+            <code id="session-id">Not started</code>
+          </div>
+          <div class="ui-message" id="playground-message">Pick a preset or enter a task and ticket manually.</div>
+        </article>
+
+        <article class="floating-panel control-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Step 2</p>
+            <h2>Submit an action</h2>
+          </div>
+          <form id="step-form" class="form-grid">
+            <label>
+              <span>Expected field</span>
+              <input id="expected-field" type="text" disabled value="Start a session first">
+            </label>
+            <label>
+              <span>Allowed values</span>
+              <select id="action-value" disabled>
+                <option>Start a session first</option>
+              </select>
+            </label>
+            <button class="button button-secondary" type="submit" disabled id="step-button">Submit Step</button>
+          </form>
+          <p class="status-helper">The playground automatically maps your choice to `severity`, `root_cause`, or `action`. If you choose a known ticket, it also sets the matching task type for you.</p>
+        </article>
+      </section>
+
+      <section class="playground-summary" id="summary-strip">
+        <article class="summary-card">
+          <span>Incident</span>
+          <strong id="summary-incident">--</strong>
+        </article>
+        <article class="summary-card">
+          <span>Expected field</span>
+          <strong id="summary-field">--</strong>
+        </article>
+        <article class="summary-card">
+          <span>Reward</span>
+          <strong id="summary-reward">--</strong>
+        </article>
+        <article class="summary-card">
+          <span>Status</span>
+          <strong id="summary-status">Waiting</strong>
+        </article>
+      </section>
+
+      <section class="dual-grid output-grid">
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Observation</p>
+            <h2>Latest reset payload</h2>
+          </div>
+          <pre class="code-panel" id="observation-output">No observation yet.</pre>
+        </article>
+
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Result</p>
+            <h2>Latest step payload</h2>
+          </div>
+          <pre class="code-panel" id="result-output">No step submitted yet.</pre>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js?v=3" defer></script>
+</body>
+</html>

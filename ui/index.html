@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incident Triage Environment</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=3">
+</head>
+<body data-page="home">
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-kicker">OpenEnv Environment</span>
+        <span class="brand-title">Incident Triage</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/status">Status</a>
+        <a href="/playground">Playground</a>
+        <a href="/docs">API Docs</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Production Incident Response</p>
+          <h1>Welcome to Incident Triage Environment</h1>
+          <p class="hero-text">
+            A real-world OpenEnv environment for severity classification, root-cause analysis,
+            and next-action recommendation across production incidents.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="/playground">Launch Playground</a>
+            <a class="button button-secondary" href="/status">View Live Status</a>
+          </div>
+        </div>
+        <div class="hero-panel floating-panel">
+          <div class="panel-header">
+            <span>Live Snapshot</span>
+            <span class="live-pill" data-health-pill>Checking</span>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-label">Total Incidents</span>
+              <strong class="stat-value" data-total-incidents>--</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Task Families</span>
+              <strong class="stat-value" data-task-count>--</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">API Mode</span>
+              <strong class="stat-value">FastAPI</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Episode Shape</span>
+              <strong class="stat-value">Single Step</strong>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-strip">
+        <article class="feature-card">
+          <span class="feature-index">01</span>
+          <h2>Typed contracts</h2>
+          <p>Observation, action, reward, state, and reset inputs are all strongly modeled for repeatable evaluation.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">02</span>
+          <h2>Deterministic graders</h2>
+          <p>Each task returns scores in the 0.0 to 1.0 range with exact-match and partial-credit rules.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">03</span>
+          <h2>Deployed workflow</h2>
+          <p>Docker packaging, Space-ready metadata, runtime validation, and a root-level baseline script are all included.</p>
+        </article>
+      </section>
+
+      <section class="tasks-section">
+        <div class="section-heading">
+          <p class="eyebrow">Task Ladder</p>
+          <h2>Three escalating operator decisions</h2>
+        </div>
+        <div class="task-grid" data-task-grid>
+          <article class="task-card skeleton-card"></article>
+          <article class="task-card skeleton-card"></article>
+          <article class="task-card skeleton-card"></article>
+        </div>
+      </section>
+
+      <section class="routes-section floating-panel">
+        <div class="section-heading compact">
+          <p class="eyebrow">Quick Links</p>
+          <h2>Use the environment your way</h2>
+        </div>
+        <div class="route-grid">
+          <a class="route-card" href="/status">
+            <strong>/status</strong>
+            <span>Live environment health, task inventory, and schema coverage.</span>
+          </a>
+          <a class="route-card" href="/playground">
+            <strong>/playground</strong>
+            <span>Manually reset a session, submit an action, and inspect the typed response.</span>
+          </a>
+          <a class="route-card" href="/docs">
+            <strong>/docs</strong>
+            <span>FastAPI-generated API reference for every endpoint and schema.</span>
+          </a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js?v=3" defer></script>
+</body>
+</html>

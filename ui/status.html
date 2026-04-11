@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incident Triage Status</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=3">
+</head>
+<body data-page="status">
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-kicker">OpenEnv Environment</span>
+        <span class="brand-title">Incident Triage</span>
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/playground">Playground</a>
+        <a href="/docs">API Docs</a>
+      </nav>
+    </header>
+
+    <main class="stack-layout">
+      <section class="section-heading">
+        <p class="eyebrow">Live Status</p>
+        <h1>Environment readiness dashboard</h1>
+        <p class="section-copy">
+          This page does not start an episode. It reads the running API and confirms the environment
+          is ready: health, dataset size, schemas, tasks, and grader rules.
+        </p>
+      </section>
+
+      <section class="guide-grid">
+        <article class="guide-card">
+          <span>Health</span>
+          <strong>Server is reachable</strong>
+          <p>Reads `/health`. The validator expects the value `healthy`.</p>
+        </article>
+        <article class="guide-card">
+          <span>Schema</span>
+          <strong>Contracts are exposed</strong>
+          <p>Reads `/schema` to verify action, observation, reward, and state shapes.</p>
+        </article>
+        <article class="guide-card">
+          <span>Tasks</span>
+          <strong>Dataset is loaded</strong>
+          <p>Reads `/metadata` and `/grader` to show task counts and scoring rules.</p>
+        </article>
+      </section>
+
+      <section class="status-overview">
+        <article class="floating-panel big-status-card">
+          <span class="status-caption">Health</span>
+          <strong class="status-display" data-health-text>Checking</strong>
+          <p class="status-helper">Expected validator value: <code>healthy</code></p>
+        </article>
+        <article class="floating-panel">
+          <span class="status-caption">Dataset</span>
+          <strong class="status-display" data-total-incidents>--</strong>
+          <p class="status-helper">Total incidents currently exposed by the environment.</p>
+        </article>
+        <article class="floating-panel">
+          <span class="status-caption">Schemas</span>
+          <strong class="status-display" data-schema-count>--</strong>
+          <p class="status-helper">Typed schemas available through <code>/schema</code>.</p>
+        </article>
+      </section>
+
+      <section class="floating-panel">
+        <div class="section-heading compact">
+          <p class="eyebrow">Task Inventory</p>
+          <h2>Difficulty progression and label space</h2>
+        </div>
+        <div class="task-grid" data-task-grid>
+          <article class="task-card skeleton-card"></article>
+          <article class="task-card skeleton-card"></article>
+          <article class="task-card skeleton-card"></article>
+        </div>
+      </section>
+
+      <section class="dual-grid">
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Schema Coverage</p>
+            <h2>Runtime contracts</h2>
+          </div>
+          <div class="badge-grid" data-schema-grid></div>
+        </article>
+
+        <article class="floating-panel">
+          <div class="section-heading compact">
+            <p class="eyebrow">Grader Summary</p>
+            <h2>Deterministic scoring rules</h2>
+          </div>
+          <div class="copy-block">
+            <p data-grader-summary>Loading grader details.</p>
+            <ul class="bullet-list" data-grader-list></ul>
+          </div>
+        </article>
+      </section>
+
+      <section class="floating-panel">
+        <div class="section-heading compact">
+          <p class="eyebrow">Endpoint Surface</p>
+          <h2>Available routes</h2>
+        </div>
+        <div class="route-grid">
+          <a class="route-card" href="/health"><strong>/health</strong><span>Validator-facing health endpoint.</span></a>
+          <a class="route-card" href="/metadata"><strong>/metadata</strong><span>Environment name, description, and task counts.</span></a>
+          <a class="route-card" href="/schema"><strong>/schema</strong><span>Action, observation, reward, and state schemas.</span></a>
+          <a class="route-card" href="/openapi.json"><strong>/openapi.json</strong><span>FastAPI OpenAPI contract for external tooling.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js?v=3" defer></script>
+</body>
+</html>
