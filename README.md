@@ -1,3 +1,13 @@
+---
+title: Incident Triage Env
+colorFrom: gray
+colorTo: blue
+sdk: docker
+app_port: 7860
+license: mit
+short_description: OpenEnv-compatible incident triage evaluation environment.
+---
+
 # Production Incident Triage Environment
 
 This project is an OpenEnv-compatible evaluation environment for production incident response. An agent receives a typed incident observation and must perform one of three real-world triage tasks: classify severity, identify the most likely root cause, or recommend the best immediate action.
