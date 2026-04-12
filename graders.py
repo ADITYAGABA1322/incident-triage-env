@@ -31,7 +31,7 @@ def grade_task1(action: IncidentAction, ground_truth: dict) -> tuple[float, str]
     predicted = _SEV_ORDER.get(action.severity.value, -1)
     expected = _SEV_ORDER.get(ground_truth["severity"], -1)
     distance = abs(predicted - expected)
-    score = {0: 1.0, 1: 0.5, 2: 0.0}[distance]
+    score = {0: 1.0, 1: 0.5, 2: 0.0}.get(distance, 0.0)
     if score == 1.0:
         return score, "Exact severity match."
     if score == 0.5:
@@ -50,6 +50,8 @@ def grade_task2(action: IncidentAction, ground_truth: dict) -> tuple[float, str]
         return 1.0, "Exact root-cause match."
     if predicted == "UNKNOWN":
         return 0.25, "Conservative fallback: uncertainty recognized, but the failure domain was not isolated."
+    # Related groups are intentionally defined as exact 2-label pairs.
+    # Keep equality here so we do not silently broaden partial-credit semantics.
     if any({predicted, expected} == group for group in _TASK2_RELATED_GROUPS):
         return 0.5, "Related failure domain selected: partial credit for a near-miss diagnosis."
     return 0.0, "Root-cause classification does not match the expected failure domain."
@@ -66,6 +68,8 @@ def grade_task3(action: IncidentAction, ground_truth: dict) -> tuple[float, str]
         return 1.0, "Exact remediation match."
     if predicted == "INVESTIGATE" and expected != "NO_ACTION":
         return 0.4, "Safe investigative fallback: the incident was recognized, but the optimal action was not taken."
+    # Choosing NO_ACTION when investigation was expected is scored more harshly
+    # than the reverse because it risks missing a real incident entirely.
     if predicted == "NO_ACTION" and expected == "INVESTIGATE":
         return 0.25, "Conservative response, but deeper investigation was expected."
     if (predicted, expected) in _TASK3_PARTIAL:

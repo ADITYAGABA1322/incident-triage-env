@@ -57,6 +57,16 @@ class GraderTests(unittest.TestCase):
         self.assertEqual(fallback_score, 0.25)
         self.assertEqual(wrong_score, 0.0)
 
+    def test_task2_grader_rewards_related_domain_partial_credit(self) -> None:
+        near_miss = IncidentAction(
+            incident_id="INC-TEST-2A",
+            task_type="task2",
+            root_cause="APPLICATION",
+        )
+        score, reason = grade_task2(near_miss, {"root_cause": "DATABASE"})
+        self.assertEqual(score, 0.5)
+        self.assertIn("partial credit", reason.lower())
+
     def test_task3_grader_rewards_safe_fallbacks(self) -> None:
         exact = IncidentAction(
             incident_id="INC-TEST-3",
@@ -79,6 +89,22 @@ class GraderTests(unittest.TestCase):
         self.assertEqual(exact_score, 1.0)
         self.assertEqual(fallback_score, 0.4)
         self.assertEqual(wrong_score, 0.0)
+
+    def test_task3_grader_rewards_related_action_partial_credit(self) -> None:
+        restart_instead_of_failover = IncidentAction(
+            incident_id="INC-TEST-3A",
+            task_type="task3",
+            action="RESTART_SERVICE",
+        )
+        notify_vendor_instead_of_investigate = IncidentAction(
+            incident_id="INC-TEST-3B",
+            task_type="task3",
+            action="NOTIFY_VENDOR",
+        )
+        restart_score, _ = grade_task3(restart_instead_of_failover, {"action": "FAILOVER"})
+        vendor_score, _ = grade_task3(notify_vendor_instead_of_investigate, {"action": "INVESTIGATE"})
+        self.assertEqual(restart_score, 0.25)
+        self.assertEqual(vendor_score, 0.25)
 
 
 if __name__ == "__main__":
