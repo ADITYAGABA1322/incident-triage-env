@@ -19,7 +19,7 @@ class InferenceOutputTests(unittest.TestCase):
 
     def test_write_results_writes_summary_to_configured_path(self) -> None:
         results = [
-            {"incident_id": "INC-001", "task_type": "task1", "score": 1.0, "success": True},
+            {"incident_id": "INC-001", "task_type": "task1", "score": 0.99, "success": True},
             {"incident_id": "INC-002", "task_type": "task2", "score": 0.5, "success": False},
         ]
 
@@ -30,13 +30,13 @@ class InferenceOutputTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             payload = json.loads(output_path.read_text())
             self.assertEqual(payload["episodes"], 2)
-            self.assertAlmostEqual(payload["average_score"], 0.75)
-            self.assertEqual(payload["by_task"]["task1"]["average_score"], 1.0)
+            self.assertAlmostEqual(payload["average_score"], 0.745)
+            self.assertEqual(payload["by_task"]["task1"]["average_score"], 0.99)
             self.assertEqual(payload["by_task"]["task2"]["average_score"], 0.5)
 
     def test_write_results_tolerates_unwritable_path(self) -> None:
         results = [
-            {"incident_id": "INC-001", "task_type": "task1", "score": 1.0, "success": True},
+            {"incident_id": "INC-001", "task_type": "task1", "score": 0.99, "success": True},
         ]
 
         with tempfile.TemporaryDirectory() as temp_dir:

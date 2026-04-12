@@ -82,7 +82,7 @@ class IncidentEnvApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["observation"]["incident_id"], "INC-014")
         self.assertEqual(body["observation"]["task_type"], "task3")
-        self.assertEqual(body["reward"]["value"], 0.0)
+        self.assertEqual(body["reward"]["value"], 0.01)
         self.assertFalse(body["done"])
         self.assertIn("session_id", body["info"])
         self.assertEqual(body["info"]["state"]["status"], "awaiting_action")
@@ -201,13 +201,13 @@ class IncidentEnvApiTests(unittest.TestCase):
             session_id="done-session",
             step_count=1,
             max_steps=1,
-            total_reward=1.0,
+            total_reward=0.99,
             done=True,
             incident_id="INC-001",
             task_type=TaskType.TASK1,
             difficulty="easy",
             status="completed",
-            last_reward=1.0,
+            last_reward=0.99,
         )
 
         with TestClient(app) as client:

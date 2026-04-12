@@ -47,7 +47,7 @@ class IncidentObservation(BaseModel):
     step_count: int = 0
     max_steps: int = 1
     last_action_summary: Optional[str] = None
-    last_reward: float = 0.0
+    last_reward: float = Field(default=0.01, gt=0.0, lt=1.0)
     episode_status: str = "awaiting_action"
 
 
@@ -82,7 +82,7 @@ class IncidentAction(BaseModel):
 
 
 class IncidentReward(BaseModel):
-    value: float = Field(..., ge=0.0, le=1.0)
+    value: float = Field(..., gt=0.0, lt=1.0)
     reason: str
 
 
@@ -98,13 +98,13 @@ class IncidentState(BaseModel):
     session_id: Optional[str] = None
     step_count: int
     max_steps: int
-    total_reward: float = 0.0
+    total_reward: float = Field(default=0.01, gt=0.0, lt=1.0)
     done: bool
     incident_id: str
     task_type: TaskType
     difficulty: str
     status: str
-    last_reward: float = 0.0
+    last_reward: float = Field(default=0.01, gt=0.0, lt=1.0)
 
 
 class ResetRequest(BaseModel):

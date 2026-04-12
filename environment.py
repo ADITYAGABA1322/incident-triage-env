@@ -39,6 +39,7 @@ TASK_SPECS = {
     },
 }
 DEFAULT_RESET_SEED = 42
+INITIAL_REWARD = 0.01
 
 
 def validate_ticket_dataset(tickets: list[dict]) -> None:
@@ -77,9 +78,9 @@ class IncidentEnv:
         self.episode_id = ""
         self.step_count = 0
         self.max_steps = 1
-        self.total_reward = 0.0
+        self.total_reward = INITIAL_REWARD
         self.done = False
-        self.last_reward = 0.0
+        self.last_reward = INITIAL_REWARD
         self.last_action_summary = None
 
     def reset(
@@ -92,14 +93,14 @@ class IncidentEnv:
         self.current_ticket = self._select_ticket(normalized_task, ticket_id, seed)
         self.episode_id = str(uuid.uuid4())
         self.step_count = 0
-        self.total_reward = 0.0
+        self.total_reward = INITIAL_REWARD
         self.done = False
-        self.last_reward = 0.0
+        self.last_reward = INITIAL_REWARD
         self.last_action_summary = None
 
         return StepResult(
             observation=self._build_observation(),
-            reward=IncidentReward(value=0.0, reason="Episode initialized."),
+            reward=IncidentReward(value=INITIAL_REWARD, reason="Episode initialized and awaiting first action."),
             done=False,
             info={
                 "episode_id": self.episode_id,
@@ -138,7 +139,7 @@ class IncidentEnv:
 
         self.step_count += 1
         self.last_reward = reward_value
-        self.total_reward += reward_value
+        self.total_reward = reward_value
         self.done = self.step_count >= self.max_steps
         self.last_action_summary = f"Submitted {selected_field}={agent_answer}"
 

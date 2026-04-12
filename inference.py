@@ -27,6 +27,7 @@ BENCHMARK = "incident-triage-env"
 MAX_TOKENS = 300
 TEMPERATURE = 0.0
 OUTPUT_PATH = Path(os.environ.get("OUTPUT_PATH") or "/tmp/outputs/baseline_scores.json")
+MIN_EPISODE_SCORE = 0.01
 
 SYSTEM_PROMPT = """You are an expert SRE triaging production incidents.
 You will receive an incident alert, structured context, and the expected output field.
@@ -356,8 +357,8 @@ def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> D
 def reward_value(step_data: Dict[str, Any]) -> float:
     reward = step_data.get("reward", {})
     if isinstance(reward, dict):
-        return float(reward.get("value", 0.0))
-    return float(reward or 0.0)
+        return float(reward.get("value", MIN_EPISODE_SCORE))
+    return float(reward or MIN_EPISODE_SCORE)
 
 
 def active_model_name(model_client: Optional[OpenAI]) -> str:
@@ -379,7 +380,7 @@ def run_episode(
 ) -> Dict[str, Any]:
     rewards: List[float] = []
     steps_taken = 0
-    score = 0.0
+    score = MIN_EPISODE_SCORE
     success = False
     episode_result: Dict[str, Any]
 
@@ -417,18 +418,18 @@ def run_episode(
             "agent_answer": step_data.get("info", {}).get("agent_answer"),
         }
     except Exception as exc:
-        log_step(step=max(steps_taken, 1), action="error", reward=0.0, done=True, error=str(exc))
-        score = 0.0
+        log_step(step=max(steps_taken, 1), action="error", reward=MIN_EPISODE_SCORE, done=True, error=str(exc))
+        score = MIN_EPISODE_SCORE
         success = False
         episode_result = {
             "incident_id": ticket["incident_id"],
             "task_type": ticket["task_type"],
-            "score": 0.0,
+            "score": MIN_EPISODE_SCORE,
             "success": False,
             "error": str(exc),
         }
     finally:
-        log_end(success=success, steps=max(steps_taken, 1), score=score, rewards=rewards or [0.0])
+        log_end(success=success, steps=max(steps_taken, 1), score=score, rewards=rewards or [MIN_EPISODE_SCORE])
 
     return episode_result
 
