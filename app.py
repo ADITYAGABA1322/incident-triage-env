@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import uuid
 from collections import Counter
 from pathlib import Path
@@ -21,16 +22,41 @@ from models import (
     TaskType,
 )
 
-app = FastAPI(title="Incident Triage Environment")
-UI_DIR = Path(__file__).parent / "ui"
-ASSETS_DIR = UI_DIR / "assets"
-
 # Session store: session_id -> IncidentEnv instance
 MAX_SESSIONS = 500
 sessions: dict[str, IncidentEnv] = {}
 completed_states: dict[str, IncidentState] = {}
 session_lock = RLock()
 task_counts = Counter(ticket["task_type"] for ticket in TICKETS)
+
+
+def emit_lifecycle_event(event: str, **fields: Any) -> None:
+    details = " ".join(f"{key}={value}" for key, value in fields.items())
+    print(f"[{event}] {details}", file=sys.stderr, flush=True)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    emit_lifecycle_event("STARTUP", status="ready")
+    try:
+        yield
+    finally:
+        with session_lock:
+            active_count = len(sessions)
+            completed_count = len(completed_states)
+            sessions.clear()
+            completed_states.clear()
+        emit_lifecycle_event(
+            "SHUTDOWN",
+            active_sessions=active_count,
+            completed_sessions=completed_count,
+            status="cleared",
+        )
+
+
+app = FastAPI(title="Incident Triage Environment", lifespan=lifespan)
+UI_DIR = Path(__file__).parent / "ui"
+ASSETS_DIR = UI_DIR / "assets"
 
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
@@ -46,6 +72,15 @@ def evict_oldest(mapping: dict[str, Any], max_size: int) -> None:
         if oldest_key is None:
             return
         mapping.pop(oldest_key, None)
+
+
+def enrich_step_result(result: StepResult, session_id: str, state: IncidentState) -> StepResult:
+    enriched_info = {
+        **result.info,
+        "session_id": session_id,
+        "state": state.model_dump(),
+    }
+    return result.model_copy(update={"info": enriched_info})
 
 
 @app.get("/", include_in_schema=False)
@@ -161,8 +196,7 @@ def reset(reset_request: ResetRequest | None = None):
         evict_oldest(sessions, MAX_SESSIONS)
         evict_oldest(completed_states, MAX_SESSIONS)
         sessions[session_id] = env
-    result.info["session_id"] = session_id
-    result.info["state"] = env.state(session_id=session_id).model_dump()
+    result = enrich_step_result(result, session_id=session_id, state=env.state(session_id=session_id))
     log_event(
         "RESET",
         session_id=session_id,
@@ -188,9 +222,8 @@ def step(action: IncidentAction, session_id: str):
         except (RuntimeError, ValueError) as e:
             log_event("STEP_ERROR", session_id=session_id, incident_id=action.incident_id, error=str(e))
             raise HTTPException(status_code=400, detail=str(e))
-        result.info["session_id"] = session_id
         current_state = env.state(session_id=session_id)
-        result.info["state"] = current_state.model_dump()
+        result = enrich_step_result(result, session_id=session_id, state=current_state)
         if result.done:
             completed_states[session_id] = current_state
             sessions.pop(session_id, None)
@@ -235,7 +268,14 @@ def get_grader_info():
             "task1": "exact=1.0, adjacent=0.5, far=0.0",
             "task2": "exact=1.0, related-domain=0.5, unknown=0.25, wrong=0.0",
             "task3": "exact=1.0, investigate fallback=0.4, related response=0.25, wrong=0.0",
-        }
+        },
+        "notes": {
+            "task2": [
+                "DATABASE and APPLICATION are treated as related because application faults often surface as database pressure and vice versa.",
+                "NETWORK, INFRASTRUCTURE, and THIRD_PARTY share limited partial-credit bridges to reflect correlated outage signatures.",
+                "APPLICATION and THIRD_PARTY are intentionally not treated as related because they imply different remediation ownership.",
+            ]
+        },
     }
 
 

@@ -38,6 +38,35 @@ TASK_SPECS = {
         "description": "Choose the best immediate operational response for stabilizing the incident.",
     },
 }
+DEFAULT_RESET_SEED = 42
+
+
+def validate_ticket_dataset(tickets: list[dict]) -> None:
+    for ticket in tickets:
+        incident_id = ticket.get("incident_id", "<unknown>")
+        task_type_raw = ticket.get("task_type")
+        try:
+            task_type = TaskType(task_type_raw)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Ticket '{incident_id}' has unsupported task_type '{task_type_raw}'."
+            ) from exc
+
+        expected_field = TASK_SPECS[task_type]["expected_field"]
+        ground_truth = ticket.get("ground_truth")
+        if not isinstance(ground_truth, dict) or not ground_truth:
+            raise RuntimeError(f"Ticket '{incident_id}' has empty ground_truth.")
+        if set(ground_truth.keys()) != {expected_field}:
+            raise RuntimeError(
+                f"Ticket '{incident_id}' must define only '{expected_field}' in ground_truth."
+            )
+        if ground_truth.get(expected_field) in (None, ""):
+            raise RuntimeError(
+                f"Ticket '{incident_id}' has missing value for ground_truth['{expected_field}']."
+            )
+
+
+validate_ticket_dataset(TICKETS)
 TICKETS_BY_ID = {ticket["incident_id"]: ticket for ticket in TICKETS}
 
 
@@ -100,13 +129,12 @@ class IncidentEnv:
         self._validate_action(action)
 
         task_type = self.current_ticket["task_type"]
-        ground_truth = self.current_ticket["ground_truth"]
+        ground_truth, ground_truth_value = self._validated_ground_truth()
         grader_fn = GRADERS[task_type]
         reward_value, reward_reason = grader_fn(action, ground_truth)
 
         agent_answer = action.selected_value() or "NONE"
         selected_field = action.selected_field() or "NONE"
-        ground_truth_value = list(ground_truth.values())[0]
 
         self.step_count += 1
         self.last_reward = reward_value
@@ -171,7 +199,8 @@ class IncidentEnv:
         if not pool:
             raise ValueError(f"No tickets found for task_type: {task_type}")
 
-        chooser = random.Random(seed) if seed is not None else random
+        effective_seed = seed if seed is not None else DEFAULT_RESET_SEED
+        chooser = random.Random(effective_seed)
         return chooser.choice(pool)
 
     def _task_spec(self) -> dict:
@@ -208,3 +237,20 @@ class IncidentEnv:
                 f"Task '{self.current_ticket['task_type']}' expects field '{expected_field}', "
                 f"but got '{next(iter(populated))}'."
             )
+
+    def _validated_ground_truth(self) -> tuple[dict, str]:
+        if self.current_ticket is None:
+            raise RuntimeError("No active episode. Call reset() first.")
+
+        incident_id = self.current_ticket["incident_id"]
+        expected_field = self._task_spec()["expected_field"]
+        ground_truth = self.current_ticket.get("ground_truth")
+        if not isinstance(ground_truth, dict) or not ground_truth:
+            raise RuntimeError(
+                f"Ticket '{incident_id}' has empty ground_truth. This is a dataset integrity error."
+            )
+        if expected_field not in ground_truth or ground_truth[expected_field] in (None, ""):
+            raise RuntimeError(
+                f"Ticket '{incident_id}' is missing ground_truth['{expected_field}']."
+            )
+        return ground_truth, str(ground_truth[expected_field])

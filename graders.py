@@ -1,6 +1,15 @@
 from models import IncidentAction
 
 _SEV_ORDER = {"SEV1": 0, "SEV2": 1, "SEV3": 2}
+# Related-domain partial credit is intentionally conservative.
+# DATABASE <-> APPLICATION captures incidents where app bugs manifest as
+# database saturation and vice versa.
+# NETWORK <-> INFRASTRUCTURE captures physical or platform-layer correlation.
+# NETWORK <-> THIRD_PARTY captures dependency outages that resemble network loss.
+# INFRASTRUCTURE <-> THIRD_PARTY captures external services failing through shared
+# platform primitives.
+# APPLICATION <-> THIRD_PARTY is intentionally not included because we treat
+# product-code failures and vendor degradation as materially different diagnoses.
 _TASK2_RELATED_GROUPS = [
     {"DATABASE", "APPLICATION"},
     {"NETWORK", "INFRASTRUCTURE"},

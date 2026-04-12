@@ -3,6 +3,8 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app import app, completed_states, sessions
+from environment import IncidentEnv, validate_ticket_dataset
+from models import IncidentAction, IncidentState, TaskType
 
 
 class IncidentEnvApiTests(unittest.TestCase):
@@ -32,6 +34,12 @@ class IncidentEnvApiTests(unittest.TestCase):
         mcp_body = mcp_response.json()
         self.assertEqual(mcp_body["jsonrpc"], "2.0")
         self.assertEqual(mcp_body["id"], 1)
+
+        grader_response = self.client.get("/grader")
+        self.assertEqual(grader_response.status_code, 200)
+        grader_body = grader_response.json()
+        self.assertIn("notes", grader_body)
+        self.assertIn("task2", grader_body["notes"])
 
     def test_tickets_endpoint_returns_safe_ticket_inventory(self) -> None:
         response = self.client.get("/tickets")
@@ -77,6 +85,17 @@ class IncidentEnvApiTests(unittest.TestCase):
         self.assertFalse(body["done"])
         self.assertIn("session_id", body["info"])
         self.assertEqual(body["info"]["state"]["status"], "awaiting_action")
+
+    def test_reset_without_seed_is_deterministic_for_same_task(self) -> None:
+        first_response = self.client.post("/reset", json={"task_type": "task2"})
+        second_response = self.client.post("/reset", json={"task_type": "task2"})
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            first_response.json()["observation"]["incident_id"],
+            second_response.json()["observation"]["incident_id"],
+        )
 
     def test_step_completes_episode_and_state_endpoint_reflects_completion(self) -> None:
         reset_response = self.client.post(
@@ -139,6 +158,63 @@ class IncidentEnvApiTests(unittest.TestCase):
 
         self.assertEqual(step_response.status_code, 400)
         self.assertIn("does not match", step_response.json()["detail"])
+
+    def test_dataset_validation_rejects_empty_ground_truth(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "empty ground_truth"):
+            validate_ticket_dataset(
+                [
+                    {
+                        "incident_id": "INC-BAD",
+                        "task_type": "task1",
+                        "alert_text": "Broken test ticket",
+                        "context": {},
+                        "ground_truth": {},
+                    }
+                ]
+            )
+
+    def test_step_raises_clear_dataset_error_for_invalid_ground_truth(self) -> None:
+        env = IncidentEnv()
+        env.current_ticket = {
+            "incident_id": "INC-BAD",
+            "task_type": "task1",
+            "alert_text": "Broken test ticket",
+            "context": {},
+            "ground_truth": {},
+        }
+        env.episode_id = "episode-bad"
+
+        with self.assertRaisesRegex(RuntimeError, "dataset integrity error"):
+            env.step(
+                IncidentAction(
+                    incident_id="INC-BAD",
+                    task_type="task1",
+                    severity="SEV1",
+                )
+            )
+
+    def test_lifespan_shutdown_clears_session_stores(self) -> None:
+        sessions["active-session"] = IncidentEnv()
+        completed_states["done-session"] = IncidentState(
+            episode_id="episode-1",
+            session_id="done-session",
+            step_count=1,
+            max_steps=1,
+            total_reward=1.0,
+            done=True,
+            incident_id="INC-001",
+            task_type=TaskType.TASK1,
+            difficulty="easy",
+            status="completed",
+            last_reward=1.0,
+        )
+
+        with TestClient(app) as client:
+            response = client.get("/health")
+            self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(sessions, {})
+        self.assertEqual(completed_states, {})
 
 
 if __name__ == "__main__":

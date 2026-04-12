@@ -101,3 +101,5 @@ reproducibility:
   max_steps_per_episode: 1
   dataset_order: fixed TICKETS list order in incidents.py
   baseline_selection: deterministic ticket_id-driven evaluation across all tickets
+  default_reset_seed: 42
+  reset_without_ticket_id: deterministic fixed-seed selection within the requested task pool

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,7 +25,7 @@ ENV_URL = os.environ.get("ENV_URL") or "http://localhost:7860"
 BENCHMARK = "incident-triage-env"
 MAX_TOKENS = 300
 TEMPERATURE = 0.0
-OUTPUT_PATH = Path("outputs/baseline_scores.json")
+OUTPUT_PATH = Path(os.environ.get("OUTPUT_PATH") or "/tmp/outputs/baseline_scores.json")
 
 SYSTEM_PROMPT = """You are an expert SRE triaging production incidents.
 You will receive an incident alert, structured context, and the expected output field.
@@ -377,7 +378,10 @@ def run_episode(
     return episode_result
 
 
-def write_results(results: List[Dict[str, Any]]) -> None:
+def write_results(
+    results: List[Dict[str, Any]],
+    output_path: Path = OUTPUT_PATH,
+) -> None:
     grouped: Dict[str, List[float]] = {}
     for result in results:
         grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
@@ -397,16 +401,25 @@ def write_results(results: List[Dict[str, Any]]) -> None:
         "results": results,
     }
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(json.dumps(summary, indent=2))
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(summary, indent=2))
+    except (PermissionError, OSError) as exc:
+        print(
+            f"[WARN] Could not write results file to {output_path}: {exc}. Scores were still emitted to stdout.",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def main() -> None:
     transport = build_transport()
-    model_client = create_model_client()
-    results = [run_episode(transport, model_client, ticket) for ticket in TICKETS]
-    write_results(results)
-    transport.close()
+    try:
+        model_client = create_model_client()
+        results = [run_episode(transport, model_client, ticket) for ticket in TICKETS]
+        write_results(results)
+    finally:
+        transport.close()
 
 
 if __name__ == "__main__":
