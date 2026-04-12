@@ -2,6 +2,8 @@ import json
 import os
 import re
 import sys
+import random as _random
+import httpx
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -103,7 +105,16 @@ class HttpEnvironmentTransport(EnvironmentTransport):
             json=action,
             timeout=30,
         )
-        response.raise_for_status()
+        if not response.ok:
+            error_body = ""
+            try:
+                error_body = response.json()
+            except Exception:
+                error_body = response.text[:500]
+            raise requests.HTTPError(
+                f"{response.status_code} {response.reason} — Body: {error_body}",
+                response=response,
+        )
         return response.json()
 
     def close(self) -> None:
@@ -112,11 +123,24 @@ class HttpEnvironmentTransport(EnvironmentTransport):
 
 class LocalEnvironmentTransport(EnvironmentTransport):
     def __init__(self):
-        from fastapi.testclient import TestClient
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError as exc:
+            raise RuntimeError(
+                "LocalEnvironmentTransport requires 'httpx'. "
+                "Install it with: pip install httpx"
+            ) from exc
 
-        import app as app_module
+        try:
+            import app as app_module
+        except ImportError as exc:
+            raise RuntimeError(
+                "Could not import 'app' module. "
+                "Make sure you are running inference.py from the project root."
+            ) from exc
 
         self.session = TestClient(app_module.app)
+
 
     def reset(self, task_type: str, ticket_id: str) -> Dict[str, Any]:
         response = self.session.post(
@@ -142,15 +166,26 @@ class LocalEnvironmentTransport(EnvironmentTransport):
 def build_transport() -> EnvironmentTransport:
     http_transport = HttpEnvironmentTransport(ENV_URL)
     if http_transport.probe():
+        print(f"[TRANSPORT] Using HTTP transport at {ENV_URL}", flush=True)
         return http_transport
     http_transport.close()
+    print(
+        f"[TRANSPORT] HTTP server at {ENV_URL} unreachable. "
+        "Falling back to local in-process transport.",
+        flush=True,
+    )
     return LocalEnvironmentTransport()
 
 
 def create_model_client() -> Optional[OpenAI]:
     if not (API_BASE_URL and API_KEY and MODEL_NAME):
         return None
-    return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    return OpenAI(
+        base_url=API_BASE_URL,
+        api_key=API_KEY,
+        timeout=20.0,
+        max_retries=0
+    )
 
 
 def build_user_prompt(observation: Dict[str, Any]) -> str:
@@ -184,12 +219,15 @@ def extract_json(raw: str) -> Dict[str, Any]:
 
 def normalize_action(raw_action: Dict[str, Any], observation: Dict[str, Any]) -> Dict[str, Any]:
     task_type = observation["task_type"]
+    def upper_or_none(val):
+        """Coerce to uppercase string or return None."""
+        return str(val).upper().strip() if val is not None else None
     return {
         "incident_id": observation["incident_id"],
         "task_type": task_type,
-        "severity": raw_action.get("severity") if task_type == "task1" else None,
-        "root_cause": raw_action.get("root_cause") if task_type == "task2" else None,
-        "action": raw_action.get("action") if task_type == "task3" else None,
+        "severity": upper_or_none(raw_action.get("severity")) if task_type == "task1" else None,
+        "root_cause": upper_or_none(raw_action.get("root_cause")) if task_type == "task2" else None,
+        "action": upper_or_none(raw_action.get("action")) if task_type == "task3" else None,
     }
 
 
@@ -209,14 +247,18 @@ def predict_severity(alert_text: str, context: Dict[str, Any]) -> str:
         or _number(context.get("failure_rate"))
         or _number(context.get("affected_users_pct"))
     )
-    revenue_impact = context.get("revenue_impact") is True or context.get("revenue_dependency") == "high"
-
+    revenue_impact = (
+        context.get("revenue_impact") is True
+        or context.get("revenue_dependency") == "high"
+        or "REVENUE IMPACT" in alert_text        # alert text is human-readable, spaces are correct here
+        or "REVENUE_IMPACT" in alert_text.replace(" ", "_")  # cover both formats
+    )
+    region_global = context.get("region") == "global"
     if (
         "CRITICAL" in alert_text
         or "100%" in alert_text
-        or "REVENUE IMPACT" in alert_text
-        or context.get("region") == "global"
         or revenue_impact
+        or region_global
         or (error_rate is not None and error_rate >= 40)
     ):
         return "SEV1"
@@ -266,7 +308,10 @@ def predict_action(alert_text: str, context_text: str) -> str:
 def heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
     task_type = observation["task_type"]
     alert_text = observation["alert_text"].upper()
-    context_text = json.dumps(observation["context"]).upper()
+    
+    # Normalize: replace underscores with spaces so "packet_loss_pct" matches "PACKET LOSS"
+    raw_context = json.dumps(observation["context"])
+    context_text = raw_context.upper().replace("_", " ")
 
     if task_type == "task1":
         return normalize_action({"severity": predict_severity(alert_text, observation["context"])}, observation)
@@ -279,7 +324,7 @@ def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> D
     if model_client is None:
         return heuristic_action(observation)
 
-    for _ in range(2):
+    for attempt in range(2):
         try:
             completion = model_client.chat.completions.create(
                 model=MODEL_NAME,
@@ -289,14 +334,26 @@ def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> D
                 ],
                 temperature=TEMPERATURE,
                 max_tokens=MAX_TOKENS,
+                timeout=15.0
             )
             content = (completion.choices[0].message.content or "").strip()
             return normalize_action(extract_json(content), observation)
-        except Exception:
+        except httpx.TimeoutException:
+            print(
+                f"[WARN] LLM call timed out on attempt {attempt + 1}. "
+                f"Incident: {observation['incident_id']}",
+                flush=True,
+            )
+            continue
+        except Exception as exc:
+            print(f"[WARN] LLM error attempt {attempt + 1}: {exc}", flush=True)
             continue
 
+    print(
+        f"[FALLBACK] Using heuristic for {observation['incident_id']} after LLM failures.",
+        flush=True,
+    )
     return heuristic_action(observation)
-
 
 def reward_value(step_data: Dict[str, Any]) -> float:
     reward = step_data.get("reward", {})
@@ -378,46 +435,133 @@ def run_episode(
     return episode_result
 
 
-def write_results(
-    results: List[Dict[str, Any]],
-    output_path: Path = OUTPUT_PATH,
-) -> None:
-    grouped: Dict[str, List[float]] = {}
-    for result in results:
-        grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
+# def write_results(
+#     results: List[Dict[str, Any]],
+#     output_path: Path = OUTPUT_PATH,
+# ) -> None:
+#     grouped: Dict[str, List[float]] = {}
+#     for result in results:
+#         grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
 
-    summary = {
-        "benchmark": BENCHMARK,
-        "model": MODEL_NAME,
-        "episodes": len(results),
-        "average_score": (sum(result.get("score", 0.0) for result in results) / len(results)) if results else 0.0,
-        "by_task": {
-            task_type: {
-                "episodes": len(scores),
-                "average_score": (sum(scores) / len(scores)) if scores else 0.0,
-            }
-            for task_type, scores in grouped.items()
-        },
-        "results": results,
-    }
+#     summary = {
+#         "benchmark": BENCHMARK,
+#         "model": MODEL_NAME,
+#         "episodes": len(results),
+#         "average_score": (sum(result.get("score", 0.0) for result in results) / len(results)) if results else 0.0,
+#         "by_task": {
+#             task_type: {
+#                 "episodes": len(scores),
+#                 "average_score": (sum(scores) / len(scores)) if scores else 0.0,
+#             }
+#             for task_type, scores in grouped.items()
+#         },
+#         "results": results,
+#     }
 
+#     try:
+#         output_path.parent.mkdir(parents=True, exist_ok=True)
+#         output_path.write_text(json.dumps(summary, indent=2))
+#     except (PermissionError, OSError) as exc:
+#         print(
+#             f"[WARN] Could not write results file to {output_path}: {exc}. Scores were still emitted to stdout.",
+#             file=sys.stderr,
+#             flush=True,
+#         )
+
+
+
+
+def write_results(results, output_path=OUTPUT_PATH):
+    # Build summary — handle serialization errors explicitly
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(summary, indent=2))
-    except (PermissionError, OSError) as exc:
+        summary = {
+            "benchmark": BENCHMARK,
+            "model": MODEL_NAME,
+            "episodes": len(results),
+            "average_score": (
+                sum(r.get("score", 0.0) for r in results) / len(results)
+            ) if results else 0.0,
+            "by_task": _group_by_task(results),
+            "results": results,
+        }
+        serialized = json.dumps(summary, indent=2)
+    except (TypeError, ValueError) as exc:
         print(
-            f"[WARN] Could not write results file to {output_path}: {exc}. Scores were still emitted to stdout.",
+            f"[ERROR] Results serialization failed: {exc}. "
+            "Raw results will be printed to stdout.",
             file=sys.stderr,
             flush=True,
         )
+        # Emergency dump — at least something is preserved
+        for result in results:
+            print(f"[RESULT] {json.dumps(result, default=str)}", flush=True)
+        return
 
+    # Attempt primary write
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(serialized)
+        print(f"[RESULTS] Written to {output_path}", flush=True)
+        return
+    except (PermissionError, OSError) as exc:
+        print(
+            f"[WARN] Primary write failed ({output_path}): {exc}",
+            file=sys.stderr, flush=True,
+        )
+
+    # Fallback: write to /tmp directly
+    fallback_path = Path("/tmp/baseline_scores_fallback.json")
+    try:
+        fallback_path.write_text(serialized)
+        print(f"[RESULTS] Fallback written to {fallback_path}", flush=True)
+        return
+    except OSError as exc2:
+        print(f"[ERROR] Fallback write also failed: {exc2}", file=sys.stderr, flush=True)
+
+    # Last resort: print to stdout as structured log
+    print(f"[RESULTS_JSON] {serialized}", flush=True)
+    # Signal failure to CI
+    sys.exit(1)
+
+
+def _group_by_task(results):
+    grouped = {}
+    for result in results:
+        grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
+    return {
+        task: {"episodes": len(scores), "average_score": sum(scores) / len(scores)}
+        for task, scores in grouped.items()
+    }
+
+def stratified_shuffle(tickets):
+    """Interleave task1/task2/task3 tickets so truncation hits all difficulties."""
+    by_task = {}
+    for ticket in tickets:
+        by_task.setdefault(ticket["task_type"], []).append(ticket)
+
+    # Shuffle within each task group
+    for group in by_task.values():
+        _random.shuffle(group)
+
+    # Round-robin interleave across task types
+    interleaved = []
+    groups = list(by_task.values())
+    max_len = max(len(g) for g in groups)
+    for i in range(max_len):
+        for group in groups:
+            if i < len(group):
+                interleaved.append(group[i])
+    return interleaved
 
 def main() -> None:
     transport = build_transport()
+    results = []
     try:
         model_client = create_model_client()
-        results = [run_episode(transport, model_client, ticket) for ticket in TICKETS]
-        write_results(results)
+        for ticket in stratified_shuffle(TICKETS):
+            result = run_episode(transport, model_client, ticket)
+            results.append(result)
+            write_results(results)
     finally:
         transport.close()
 

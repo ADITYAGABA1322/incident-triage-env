@@ -91,6 +91,7 @@ class IncidentEnv:
         normalized_task = TaskType(task_type) if task_type else None
         self.current_ticket = self._select_ticket(normalized_task, ticket_id, seed)
         self.episode_id = str(uuid.uuid4())
+        self.session_id = str(uuid.uuid4())
         self.step_count = 0
         self.total_reward = 0.0
         self.done = False
@@ -103,6 +104,7 @@ class IncidentEnv:
             done=False,
             info={
                 "episode_id": self.episode_id,
+                "session_id": self.session_id,
                 "task_name": self._task_spec()["name"],
                 "difficulty": self._task_spec()["difficulty"],
                 "max_steps": self.max_steps,
@@ -198,10 +200,17 @@ class IncidentEnv:
             pool = [ticket for ticket in TICKETS if ticket["task_type"] == task_type.value]
         if not pool:
             raise ValueError(f"No tickets found for task_type: {task_type}")
+        
+        if seed is not None:
+        # Reproducible selection when caller provides a seed
+            return random.Random(seed).choice(pool)
+        else:
+        # True random selection when no seed given
+            return random.choice(pool)
 
-        effective_seed = seed if seed is not None else DEFAULT_RESET_SEED
-        chooser = random.Random(effective_seed)
-        return chooser.choice(pool)
+        # effective_seed = seed if seed is not None else DEFAULT_RESET_SEED
+        # chooser = random.Random(effective_seed)
+        # return chooser.choice(pool)
 
     def _task_spec(self) -> dict:
         if self.current_ticket is None:
