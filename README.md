@@ -22,13 +22,13 @@ The environment is built for the OpenEnv hackathon requirements:
 
 ## Overview
 
-The dataset contains 36 incidents across three task families:
+The dataset contains 108 incidents across three task families:
 
 | Task | Difficulty | Count | Objective |
 |---|---|---:|---|
-| `task1` | easy | 11 | Predict incident severity as `SEV1`, `SEV2`, or `SEV3` |
-| `task2` | medium | 12 | Predict the most likely root cause domain |
-| `task3` | hard | 13 | Predict the best immediate operational action |
+| `task1` | easy | 36 | Predict incident severity as `SEV1`, `SEV2`, or `SEV3` |
+| `task2` | medium | 36 | Predict the most likely root cause domain |
+| `task3` | hard | 36 | Predict the best immediate operational action |
 
 The incidents cover realistic production scenarios such as payment failures, queue backlogs, regional network loss, failed deploys, infrastructure saturation, third-party degradation, and failover decisions.
 
@@ -228,13 +228,14 @@ Latest local deterministic baseline:
 
 | Metric | Value |
 |---|---:|
-| Episodes | 36 |
-| Average score | 0.9861 |
+| Episodes | 108 |
+| Average score | 0.9954 |
 | `task1` average | 1.0000 |
-| `task2` average | 0.9583 |
+| `task2` average | 0.9861 |
 | `task3` average | 1.0000 |
 
-These results are written to `outputs/baseline_scores.json`.
+This deterministic local run completed in about `1.34s` on the current machine.
+Results are written by default to `/tmp/outputs/baseline_scores.json`.
 
 ## Quick API Example
 

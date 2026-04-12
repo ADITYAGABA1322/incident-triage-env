@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import app, completed_states, sessions
 from environment import IncidentEnv, validate_ticket_dataset
+from incidents import TICKETS
 from models import IncidentAction, IncidentState, TaskType
 
 
@@ -45,7 +46,7 @@ class IncidentEnvApiTests(unittest.TestCase):
         response = self.client.get("/tickets")
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["count"], 36)
+        self.assertEqual(body["count"], len(TICKETS))
         self.assertEqual(body["tickets"][0]["incident_id"], "INC-001")
         self.assertIn("expected_field", body["tickets"][0])
         self.assertNotIn("ground_truth", body["tickets"][0])

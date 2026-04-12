@@ -83,18 +83,18 @@ tasks:
     reward: "1.0 exact | 0.4 safe investigate fallback | 0.25 related action | 0.0 wrong"
 
 dataset:
-  total_tickets: 36
+  total_tickets: 108
   split:
-    task1: 11
-    task2: 12
-    task3: 13
+    task1: 36
+    task2: 36
+    task3: 36
 
 baseline:
   script: inference.py
   required_env_vars: [API_BASE_URL, MODEL_NAME, HF_TOKEN]
   optional_env_vars: [ENV_URL]
-  latest_local_score: 0.9861
-  latest_local_episodes: 36
+  latest_local_score: 0.9954
+  latest_local_episodes: 108
 
 reproducibility:
   inference_temperature: 0.0
