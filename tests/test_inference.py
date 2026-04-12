@@ -3,10 +3,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from inference import write_results
+from inference import normalize_action, write_results
 
 
 class InferenceOutputTests(unittest.TestCase):
+    def test_normalize_action_uppercases_model_outputs(self) -> None:
+        normalized = normalize_action(
+            {"action": "failover"},
+            {"incident_id": "INC-014", "task_type": "task3"},
+        )
+
+        self.assertEqual(normalized["action"], "FAILOVER")
+        self.assertIsNone(normalized["severity"])
+        self.assertIsNone(normalized["root_cause"])
+
     def test_write_results_writes_summary_to_configured_path(self) -> None:
         results = [
             {"incident_id": "INC-001", "task_type": "task1", "score": 1.0, "success": True},

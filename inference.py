@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -93,7 +94,7 @@ class HttpEnvironmentTransport(EnvironmentTransport):
             json={"task_type": task_type, "ticket_id": ticket_id},
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_body(response)
         return response.json()
 
     def step(self, session_id: str, action: Dict[str, Any]) -> Dict[str, Any]:
@@ -103,18 +104,42 @@ class HttpEnvironmentTransport(EnvironmentTransport):
             json=action,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_body(response)
         return response.json()
 
     def close(self) -> None:
         self.session.close()
 
+    @staticmethod
+    def _raise_for_status_with_body(response: requests.Response) -> None:
+        if response.ok:
+            return
+        try:
+            error_body = response.json()
+        except ValueError:
+            error_body = response.text[:500]
+        raise requests.HTTPError(
+            f"{response.status_code} {response.reason} — Body: {error_body}",
+            response=response,
+        )
+
 
 class LocalEnvironmentTransport(EnvironmentTransport):
     def __init__(self):
-        from fastapi.testclient import TestClient
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError as exc:
+            raise RuntimeError(
+                "LocalEnvironmentTransport requires FastAPI test-client dependencies "
+                "(including httpx). Install them with: pip install fastapi httpx"
+            ) from exc
 
-        import app as app_module
+        try:
+            import app as app_module
+        except ImportError as exc:
+            raise RuntimeError(
+                "Could not import the local app module. Run inference.py from the project root."
+            ) from exc
 
         self.session = TestClient(app_module.app)
 
@@ -142,15 +167,25 @@ class LocalEnvironmentTransport(EnvironmentTransport):
 def build_transport() -> EnvironmentTransport:
     http_transport = HttpEnvironmentTransport(ENV_URL)
     if http_transport.probe():
+        print(f"[TRANSPORT] Using HTTP transport at {ENV_URL}", flush=True)
         return http_transport
     http_transport.close()
+    print(
+        f"[TRANSPORT] HTTP server at {ENV_URL} is unavailable. Falling back to local in-process transport.",
+        flush=True,
+    )
     return LocalEnvironmentTransport()
 
 
 def create_model_client() -> Optional[OpenAI]:
     if not (API_BASE_URL and API_KEY and MODEL_NAME):
         return None
-    return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    return OpenAI(
+        base_url=API_BASE_URL,
+        api_key=API_KEY,
+        timeout=20.0,
+        max_retries=0,
+    )
 
 
 def build_user_prompt(observation: Dict[str, Any]) -> str:
@@ -184,12 +219,18 @@ def extract_json(raw: str) -> Dict[str, Any]:
 
 def normalize_action(raw_action: Dict[str, Any], observation: Dict[str, Any]) -> Dict[str, Any]:
     task_type = observation["task_type"]
+
+    def upper_or_none(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value).upper().strip()
+
     return {
         "incident_id": observation["incident_id"],
         "task_type": task_type,
-        "severity": raw_action.get("severity") if task_type == "task1" else None,
-        "root_cause": raw_action.get("root_cause") if task_type == "task2" else None,
-        "action": raw_action.get("action") if task_type == "task3" else None,
+        "severity": upper_or_none(raw_action.get("severity")) if task_type == "task1" else None,
+        "root_cause": upper_or_none(raw_action.get("root_cause")) if task_type == "task2" else None,
+        "action": upper_or_none(raw_action.get("action")) if task_type == "task3" else None,
     }
 
 
@@ -209,7 +250,12 @@ def predict_severity(alert_text: str, context: Dict[str, Any]) -> str:
         or _number(context.get("failure_rate"))
         or _number(context.get("affected_users_pct"))
     )
-    revenue_impact = context.get("revenue_impact") is True or context.get("revenue_dependency") == "high"
+    revenue_impact = (
+        context.get("revenue_impact") is True
+        or context.get("revenue_dependency") == "high"
+        or "REVENUE IMPACT" in alert_text
+        or "REVENUE_IMPACT" in alert_text.replace(" ", "_")
+    )
 
     if (
         "CRITICAL" in alert_text
@@ -266,7 +312,7 @@ def predict_action(alert_text: str, context_text: str) -> str:
 def heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
     task_type = observation["task_type"]
     alert_text = observation["alert_text"].upper()
-    context_text = json.dumps(observation["context"]).upper()
+    context_text = json.dumps(observation["context"]).upper().replace("_", " ")
 
     if task_type == "task1":
         return normalize_action({"severity": predict_severity(alert_text, observation["context"])}, observation)
@@ -279,7 +325,7 @@ def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> D
     if model_client is None:
         return heuristic_action(observation)
 
-    for _ in range(2):
+    for attempt in range(2):
         try:
             completion = model_client.chat.completions.create(
                 model=MODEL_NAME,
@@ -289,12 +335,21 @@ def get_action(model_client: Optional[OpenAI], observation: Dict[str, Any]) -> D
                 ],
                 temperature=TEMPERATURE,
                 max_tokens=MAX_TOKENS,
+                timeout=15.0,
             )
             content = (completion.choices[0].message.content or "").strip()
             return normalize_action(extract_json(content), observation)
-        except Exception:
+        except Exception as exc:
+            print(
+                f"[WARN] LLM error on attempt {attempt + 1} for {observation['incident_id']}: {exc}",
+                flush=True,
+            )
             continue
 
+    print(
+        f"[FALLBACK] Using heuristic for {observation['incident_id']} after LLM failures.",
+        flush=True,
+    )
     return heuristic_action(observation)
 
 
@@ -382,34 +437,60 @@ def write_results(
     results: List[Dict[str, Any]],
     output_path: Path = OUTPUT_PATH,
 ) -> None:
-    grouped: Dict[str, List[float]] = {}
-    for result in results:
-        grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
-
-    summary = {
-        "benchmark": BENCHMARK,
-        "model": MODEL_NAME,
-        "episodes": len(results),
-        "average_score": (sum(result.get("score", 0.0) for result in results) / len(results)) if results else 0.0,
-        "by_task": {
-            task_type: {
-                "episodes": len(scores),
-                "average_score": (sum(scores) / len(scores)) if scores else 0.0,
-            }
-            for task_type, scores in grouped.items()
-        },
-        "results": results,
-    }
-
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(summary, indent=2))
-    except (PermissionError, OSError) as exc:
+        summary = {
+            "benchmark": BENCHMARK,
+            "model": MODEL_NAME,
+            "episodes": len(results),
+            "average_score": (sum(result.get("score", 0.0) for result in results) / len(results)) if results else 0.0,
+            "by_task": _group_by_task(results),
+            "results": results,
+        }
+        serialized = json.dumps(summary, indent=2)
+    except (TypeError, ValueError) as exc:
         print(
-            f"[WARN] Could not write results file to {output_path}: {exc}. Scores were still emitted to stdout.",
+            f"[ERROR] Results serialization failed: {exc}. Raw episode results follow.",
             file=sys.stderr,
             flush=True,
         )
+        for result in results:
+            print(f"[RESULT] {json.dumps(result, default=str)}", flush=True)
+        return
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(serialized)
+        print(f"[RESULTS] Written to {output_path}", flush=True)
+    except (PermissionError, OSError) as exc:
+        print(
+            f"[WARN] Could not write results file to {output_path}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        fallback_path = Path(tempfile.gettempdir()) / "incident-triage-env-baseline-scores.json"
+        try:
+            fallback_path.write_text(serialized)
+            print(f"[RESULTS] Fallback written to {fallback_path}", flush=True)
+        except OSError as fallback_exc:
+            print(
+                f"[WARN] Fallback results write failed: {fallback_exc}. Emitting JSON summary to stdout.",
+                file=sys.stderr,
+                flush=True,
+            )
+            print(f"[RESULTS_JSON] {serialized}", flush=True)
+
+
+def _group_by_task(results: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    grouped: Dict[str, List[float]] = {}
+    for result in results:
+        grouped.setdefault(result["task_type"], []).append(result.get("score", 0.0))
+    return {
+        task_type: {
+            "episodes": len(scores),
+            "average_score": (sum(scores) / len(scores)) if scores else 0.0,
+        }
+        for task_type, scores in grouped.items()
+    }
 
 
 def main() -> None:
