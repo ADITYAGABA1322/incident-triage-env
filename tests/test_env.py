@@ -117,7 +117,7 @@ class IncidentEnvApiTests(unittest.TestCase):
         self.assertEqual(step_response.status_code, 200)
         step_body = step_response.json()
         self.assertTrue(step_body["done"])
-        self.assertEqual(step_body["reward"]["value"], 1.0)
+        self.assertEqual(step_body["reward"]["value"], 0.99)
         self.assertTrue(step_body["info"]["correct"])
         self.assertEqual(step_body["info"]["ground_truth"], "FAILOVER")
 
@@ -126,7 +126,7 @@ class IncidentEnvApiTests(unittest.TestCase):
         state_body = state_response.json()
         self.assertTrue(state_body["done"])
         self.assertEqual(state_body["status"], "completed")
-        self.assertEqual(state_body["last_reward"], 1.0)
+        self.assertEqual(state_body["last_reward"], 0.99)
         self.assertNotIn(session_id, sessions)
         self.assertIn(session_id, completed_states)
 

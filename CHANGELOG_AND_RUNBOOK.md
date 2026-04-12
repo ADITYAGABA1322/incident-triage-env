@@ -114,7 +114,7 @@ The backend now prints useful logs when the UI or API is used:
 
 ```text
 [RESET] session_id=... incident_id=INC-014 task_type=task3 expected_field=action
-[STEP] session_id=... incident_id=INC-014 task_type=task3 answer=FAILOVER reward=1.0 done=true
+[STEP] session_id=... incident_id=INC-014 task_type=task3 answer=FAILOVER reward=0.99 done=true
 [STATE] session_id=... incident_id=INC-014 done=true
 [STEP_ERROR] session_id=... incident_id=INC-014 error=...
 ```
@@ -203,7 +203,7 @@ Run a correct hard-task case:
 
 Expected result:
 
-- `reward.value` is `1.0`.
+- `reward.value` is `0.99`.
 - `done` is `true`.
 - `info.correct` is `true`.
 - `info.ground_truth` is `FAILOVER`.
@@ -218,7 +218,7 @@ Expected terminal logs:
 
 ```text
 [RESET] session_id=... incident_id=INC-014 task_type=task3 expected_field=action
-[STEP] session_id=... incident_id=INC-014 task_type=task3 answer=FAILOVER reward=1.0 done=true
+[STEP] session_id=... incident_id=INC-014 task_type=task3 answer=FAILOVER reward=0.99 done=true
 ```
 
 Run a task1 case:
@@ -232,7 +232,7 @@ Run a task1 case:
 
 Expected result:
 
-- reward should be `1.0`.
+- reward should be `0.99`.
 
 Run a task2 case:
 
@@ -245,7 +245,7 @@ Run a task2 case:
 
 Expected result:
 
-- reward should be `1.0`.
+- reward should be `0.99`.
 
 ## 4. Test backend API with curl
 
@@ -311,7 +311,7 @@ Expected state:
 
 - `done` is `true`
 - `status` is `completed`
-- `last_reward` is `1.0`
+- `last_reward` is `0.99`
 
 ## 5. Test backend edge cases
 
@@ -408,8 +408,8 @@ Expected log format:
 
 ```text
 [START] task=INC-001 env=incident-triage-env model=...
-[STEP] step=1 action=SEV1 reward=1.00 done=true error=null
-[END] success=true steps=1 score=1.00 rewards=1.00
+[STEP] step=1 action=SEV1 reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.99 rewards=0.99
 ```
 
 If no server is reachable, `inference.py` falls back to an in-process FastAPI client.

@@ -114,9 +114,9 @@ Validation rules:
 
 Rewarding is deterministic and implemented in [graders.py](./graders.py).
 
-- `task1`: `1.0` exact, `0.5` adjacent severity, `0.0` far miss
-- `task2`: `1.0` exact, `0.5` related domain, `0.25` `UNKNOWN`, `0.0` wrong
-- `task3`: `1.0` exact, `0.4` safe `INVESTIGATE` fallback, `0.25` related action, `0.0` wrong
+- `task1`: `0.99` exact, `0.5` adjacent severity, `0.01` far miss
+- `task2`: `0.99` exact, `0.5` related domain, `0.25` `UNKNOWN`, `0.01` wrong
+- `task3`: `0.99` exact, `0.4` safe `INVESTIGATE` fallback, `0.25` related action, `0.01` wrong
 
 This keeps grading reproducible while still giving partial-credit trajectory signal.
 
@@ -218,8 +218,8 @@ curl http://localhost:7860/health
 
 ```text
 [START] task=INC-001 env=incident-triage-env model=deterministic-baseline
-[STEP] step=1 action=SEV1 reward=1.00 done=true error=null
-[END] success=true steps=1 score=1.00 rewards=1.00
+[STEP] step=1 action=SEV1 reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.99 rewards=0.99
 ```
 
 ## Baseline Scores
@@ -229,10 +229,10 @@ Latest local deterministic baseline:
 | Metric | Value |
 |---|---:|
 | Episodes | 108 |
-| Average score | 0.9954 |
-| `task1` average | 1.0000 |
-| `task2` average | 0.9861 |
-| `task3` average | 1.0000 |
+| Average score | 0.9855 |
+| `task1` average | 0.9900 |
+| `task2` average | 0.9764 |
+| `task3` average | 0.9900 |
 
 This deterministic local run completed in about `1.34s` on the current machine.
 Results are written by default to `/tmp/outputs/baseline_scores.json`.
@@ -274,4 +274,5 @@ curl -X POST "http://localhost:7860/step?session_id=<session-id>" \
 
 - `models.py` is the source of truth for valid enum labels.
 - `graders.py` is the source of truth for scoring logic.
+- Reward values are kept strictly within `(0, 1)` to satisfy Phase 2 validator constraints.
 - The environment is intentionally single-step per episode and still exposes typed state for validation and debugging.

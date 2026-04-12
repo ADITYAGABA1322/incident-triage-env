@@ -150,7 +150,7 @@ class IncidentEnv:
                 "episode_id": self.episode_id,
                 "task_name": self._task_spec()["name"],
                 "difficulty": self._task_spec()["difficulty"],
-                "correct": reward_value == 1.0,
+                "correct": agent_answer == ground_truth_value,
                 "ground_truth": ground_truth_value,
                 "agent_answer": agent_answer,
                 "selected_field": selected_field,

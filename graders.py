@@ -1,15 +1,7 @@
 from models import IncidentAction
 
 _SEV_ORDER = {"SEV1": 0, "SEV2": 1, "SEV3": 2}
-# Related-domain partial credit is intentionally conservative.
-# DATABASE <-> APPLICATION captures incidents where app bugs manifest as
-# database saturation and vice versa.
-# NETWORK <-> INFRASTRUCTURE captures physical or platform-layer correlation.
-# NETWORK <-> THIRD_PARTY captures dependency outages that resemble network loss.
-# INFRASTRUCTURE <-> THIRD_PARTY captures external services failing through shared
-# platform primitives.
-# APPLICATION <-> THIRD_PARTY is intentionally not included because we treat
-# product-code failures and vendor degradation as materially different diagnoses.
+
 _TASK2_RELATED_GROUPS = [
     {"DATABASE", "APPLICATION"},
     {"NETWORK", "INFRASTRUCTURE"},
@@ -24,15 +16,19 @@ _TASK3_PARTIAL = {
     ("RESTART_SERVICE", "INVESTIGATE"): 0.25,
 }
 
+# Scores must be strictly within (0, 1) — 0.0 and 1.0 are rejected by the validator.
+_EXACT = 0.99
+_ZERO  = 0.01
+
 
 def grade_task1(action: IncidentAction, ground_truth: dict) -> tuple[float, str]:
     if action.severity is None:
-        return 0.0, "Missing severity classification."
+        return _ZERO, "Missing severity classification."
     predicted = _SEV_ORDER.get(action.severity.value, -1)
     expected = _SEV_ORDER.get(ground_truth["severity"], -1)
     distance = abs(predicted - expected)
-    score = {0: 1.0, 1: 0.5, 2: 0.0}.get(distance, 0.0)
-    if score == 1.0:
+    score = {0: _EXACT, 1: 0.5, 2: _ZERO}.get(distance, _ZERO)
+    if score == _EXACT:
         return score, "Exact severity match."
     if score == 0.5:
         return score, "Adjacent severity band: partial credit for a close escalation call."
@@ -41,40 +37,36 @@ def grade_task1(action: IncidentAction, ground_truth: dict) -> tuple[float, str]
 
 def grade_task2(action: IncidentAction, ground_truth: dict) -> tuple[float, str]:
     if action.root_cause is None:
-        return 0.0, "Missing root-cause classification."
+        return _ZERO, "Missing root-cause classification."
 
     predicted = action.root_cause.value
     expected = ground_truth["root_cause"]
 
     if predicted == expected:
-        return 1.0, "Exact root-cause match."
+        return _EXACT, "Exact root-cause match."
     if predicted == "UNKNOWN":
         return 0.25, "Conservative fallback: uncertainty recognized, but the failure domain was not isolated."
-    # Related groups are intentionally defined as exact 2-label pairs.
-    # Keep equality here so we do not silently broaden partial-credit semantics.
     if any({predicted, expected} == group for group in _TASK2_RELATED_GROUPS):
         return 0.5, "Related failure domain selected: partial credit for a near-miss diagnosis."
-    return 0.0, "Root-cause classification does not match the expected failure domain."
+    return _ZERO, "Root-cause classification does not match the expected failure domain."
 
 
 def grade_task3(action: IncidentAction, ground_truth: dict) -> tuple[float, str]:
     if action.action is None:
-        return 0.0, "Missing remediation recommendation."
+        return _ZERO, "Missing remediation recommendation."
 
     predicted = action.action.value
     expected = ground_truth["action"]
 
     if predicted == expected:
-        return 1.0, "Exact remediation match."
+        return _EXACT, "Exact remediation match."
     if predicted == "INVESTIGATE" and expected != "NO_ACTION":
         return 0.4, "Safe investigative fallback: the incident was recognized, but the optimal action was not taken."
-    # Choosing NO_ACTION when investigation was expected is scored more harshly
-    # than the reverse because it risks missing a real incident entirely.
     if predicted == "NO_ACTION" and expected == "INVESTIGATE":
         return 0.25, "Conservative response, but deeper investigation was expected."
     if (predicted, expected) in _TASK3_PARTIAL:
         return _TASK3_PARTIAL[(predicted, expected)], "Related remediation selected: partial credit for a close operational response."
-    return 0.0, "Recommended action does not match the expected operator response."
+    return _ZERO, "Recommended action does not match the expected operator response."
 
 
 GRADERS = {

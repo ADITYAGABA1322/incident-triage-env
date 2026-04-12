@@ -6,7 +6,7 @@ from models import IncidentAction
 
 
 class GraderTests(unittest.TestCase):
-    def test_all_ticket_ground_truth_scores_are_bounded(self) -> None:
+    def test_all_ticket_ground_truth_scores_stay_strictly_within_unit_interval(self) -> None:
         for ticket in TICKETS:
             action = IncidentAction(
                 incident_id=ticket["incident_id"],
@@ -14,8 +14,8 @@ class GraderTests(unittest.TestCase):
                 **ticket["ground_truth"],
             )
             score, reason = GRADERS[ticket["task_type"]](action, ticket["ground_truth"])
-            self.assertGreaterEqual(score, 0.0, ticket["incident_id"])
-            self.assertLessEqual(score, 1.0, ticket["incident_id"])
+            self.assertGreater(score, 0.0, ticket["incident_id"])
+            self.assertLess(score, 1.0, ticket["incident_id"])
             self.assertIsInstance(reason, str)
 
     def test_task1_grader_supports_partial_credit(self) -> None:
@@ -31,7 +31,7 @@ class GraderTests(unittest.TestCase):
         )
         exact_score, _ = grade_task1(exact, {"severity": "SEV1"})
         adjacent_score, _ = grade_task1(adjacent, {"severity": "SEV1"})
-        self.assertEqual(exact_score, 1.0)
+        self.assertEqual(exact_score, 0.99)
         self.assertEqual(adjacent_score, 0.5)
 
     def test_task2_grader_is_not_constant(self) -> None:
@@ -53,9 +53,9 @@ class GraderTests(unittest.TestCase):
         exact_score, _ = grade_task2(exact, {"root_cause": "DATABASE"})
         fallback_score, _ = grade_task2(fallback, {"root_cause": "DATABASE"})
         wrong_score, _ = grade_task2(wrong, {"root_cause": "DATABASE"})
-        self.assertEqual(exact_score, 1.0)
+        self.assertEqual(exact_score, 0.99)
         self.assertEqual(fallback_score, 0.25)
-        self.assertEqual(wrong_score, 0.0)
+        self.assertEqual(wrong_score, 0.01)
 
     def test_task2_grader_rewards_related_domain_partial_credit(self) -> None:
         near_miss = IncidentAction(
@@ -86,9 +86,9 @@ class GraderTests(unittest.TestCase):
         exact_score, _ = grade_task3(exact, {"action": "FAILOVER"})
         fallback_score, _ = grade_task3(fallback, {"action": "FAILOVER"})
         wrong_score, _ = grade_task3(wrong, {"action": "FAILOVER"})
-        self.assertEqual(exact_score, 1.0)
+        self.assertEqual(exact_score, 0.99)
         self.assertEqual(fallback_score, 0.4)
-        self.assertEqual(wrong_score, 0.0)
+        self.assertEqual(wrong_score, 0.01)
 
     def test_task3_grader_rewards_related_action_partial_credit(self) -> None:
         restart_instead_of_failover = IncidentAction(

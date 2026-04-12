@@ -263,11 +263,11 @@ def state(session_id: str):
 def get_grader_info():
     return {
         "grading": "deterministic",
-        "scoring": "task1: adjacent-severity partial credit; task2/task3: exact match plus conservative near-miss partial credit",
+        "scoring": "task1: adjacent-severity partial credit; task2/task3: exact match plus conservative near-miss partial credit; all rewards remain strictly within (0, 1)",
         "tasks": {
-            "task1": "exact=1.0, adjacent=0.5, far=0.0",
-            "task2": "exact=1.0, related-domain=0.5, unknown=0.25, wrong=0.0",
-            "task3": "exact=1.0, investigate fallback=0.4, related response=0.25, wrong=0.0",
+            "task1": "exact=0.99, adjacent=0.5, far=0.01",
+            "task2": "exact=0.99, related-domain=0.5, unknown=0.25, wrong=0.01",
+            "task3": "exact=0.99, investigate fallback=0.4, related response=0.25, wrong=0.01",
         },
         "notes": {
             "task2": [
